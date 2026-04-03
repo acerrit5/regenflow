@@ -436,7 +436,7 @@ function LoginPage() {
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Sign in to Klyrix</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Sign in to RegenFlow</h1>
           <p style={{ fontSize: 14, color: DS.colors.muted }}>Enter your credentials to continue</p>
         </div>
         <Card>
@@ -576,7 +576,7 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: DS.radius.md, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, flexShrink: 0 }}>RF</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>Klyrix</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>RegenFlow</div>
             {clinic && <div style={{ fontSize: 10.5, color: DS.colors.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{clinic.clinic_name}</div>}
           </div>
           {isCollapsed && <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.muted, padding: 4 }}>✕</button>}
@@ -609,7 +609,7 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 56, background: DS.colors.white, borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 12, zIndex: 200 }}>
           <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.ink, padding: 6 }}>☰</button>
           <div style={{ width: 28, height: 28, borderRadius: DS.radius.sm, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>Klyrix</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>RegenFlow</span>
         </div>
         {open && (
           <div style={{ position: "fixed", inset: 0, zIndex: 300 }}>
@@ -1680,7 +1680,7 @@ function AdminAI() {
         {aiChat.length === 0 && (
           <div style={{ textAlign: "center", paddingTop: 60, color: DS.colors.muted }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: DS.colors.ink }}>Klyrix AI</div>
+            <div style={{ fontWeight: 600, fontSize: 16, color: DS.colors.ink }}>RegenFlow AI</div>
             <div style={{ fontSize: 13, marginTop: 6 }}>Ask me about patient risk, drafting messages, or clinic activity.</div>
           </div>
         )}
@@ -1713,17 +1713,13 @@ function SuperAdminPortal() {
   const [allProfiles, setAllProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAll = useCallback(async () => {
-    const [c, { data: p }] = await Promise.all([
-      getAllClinics(),
-      supabase.from("profiles").select("*, clinics(clinic_name)").order("created_at", { ascending: false })
-    ]);
-    setClinics(c);
-    setAllProfiles(p || []);
-    setLoading(false);
+  useEffect(() => {
+    Promise.all([getAllClinics(), supabase.from("profiles").select("*, clinics(clinic_name)").order("created_at", { ascending: false })]).then(([c, { data: p }]) => {
+      setClinics(c);
+      setAllProfiles(p || []);
+      setLoading(false);
+    });
   }, []);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleToggle = async (id, isActive) => {
     try {
@@ -1735,7 +1731,7 @@ function SuperAdminPortal() {
     }
   };
 
-  const handleCreateClinic = async (name, email, plan) => {
+  const handleCreate = async (name, email, plan) => {
     try {
       const c = await createClinic({ clinicName: name, contactEmail: email, planType: plan });
       setClinics(prev => [c, ...prev]);
@@ -1745,60 +1741,7 @@ function SuperAdminPortal() {
     }
   };
 
-  const handleCreateUser = async ({ name, email, password, role, clinicId, title }) => {
-    try {
-      // 1. Create the auth user
-      const { data: authData, error: authError } = await supabase.auth.admin
-        ? supabase.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { name, role, clinic_id: clinicId } })
-        : { data: null, error: { message: "Admin API not available" } };
-
-      // Fallback: use signUp which works without admin API
-      let userId;
-      if (authError || !authData?.user) {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email, password, options: { data: { name, role, clinic_id: clinicId } }
-        });
-        if (signUpError) throw signUpError;
-        userId = signUpData.user?.id;
-      } else {
-        userId = authData.user.id;
-      }
-
-      if (!userId) throw new Error("Failed to create user");
-
-      // 2. Upsert profile with correct role and clinic
-      const { error: profileError } = await supabase.from("profiles").upsert({
-        id: userId,
-        name,
-        role,
-        clinic_id: clinicId || null,
-        title: title || null,
-      });
-      if (profileError) throw profileError;
-
-      showToast(`${name} created successfully`);
-      await fetchAll();
-    } catch (e) {
-      showToast(e.message, "error");
-      throw e;
-    }
-  };
-
-  const handleDeleteUser = async (userId, userName) => {
-    if (!window.confirm(`Delete ${userName}? This cannot be undone.`)) return;
-    try {
-      await supabase.from("profiles").delete().eq("id", userId);
-      setAllProfiles(prev => prev.filter(p => p.id !== userId));
-      showToast(`${userName} deleted`);
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const navItems = [
-    { key: "clinics", label: "All Clinics" },
-    { key: "users", label: "All Users" },
-  ];
+  const navItems = [{ key: "clinics", label: "All Clinics" }, { key: "users", label: "All Users" }];
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface }}>
@@ -1806,8 +1749,8 @@ function SuperAdminPortal() {
       <main style={{ flex: 1, marginLeft: isMobile ? 0 : 232, marginTop: isMobile ? 56 : 0 }}>
         {loading ? <Spinner /> : (
           <>
-            {tab === "clinics" && <SuperClinics clinics={clinics} allProfiles={allProfiles} onToggle={handleToggle} onCreate={handleCreateClinic} />}
-            {tab === "users" && <SuperUsers profiles={allProfiles} clinics={clinics} onCreateUser={handleCreateUser} onDeleteUser={handleDeleteUser} />}
+            {tab === "clinics" && <SuperClinics clinics={clinics} allProfiles={allProfiles} onToggle={handleToggle} onCreate={handleCreate} />}
+            {tab === "users" && <SuperUsers profiles={allProfiles} />}
           </>
         )}
       </main>
@@ -1887,171 +1830,26 @@ function SuperClinics({ clinics, allProfiles, onToggle, onCreate }) {
   );
 }
 
-function SuperUsers({ profiles, clinics, onCreateUser, onDeleteUser }) {
+function SuperUsers({ profiles }) {
   const roleColors = { super_admin: "#B45309", clinic_admin: DS.colors.purple, clinic_staff: DS.colors.blue, patient: DS.colors.success };
-  const [showModal, setShowModal] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filterRole, setFilterRole] = useState("all");
-
-  // Create user form state
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [role, setRole] = useState("clinic_admin");
-  const [clinicId, setClinicId] = useState("");
-  const [title, setTitle] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState("");
-
-  const resetForm = () => {
-    setName(""); setEmail(""); setPassword(""); setRole("clinic_admin");
-    setClinicId(""); setTitle(""); setCreateError("");
-  };
-
-  const doCreate = async () => {
-    if (!name || !email || !password) { setCreateError("Name, email and password are required."); return; }
-    if (password.length < 8) { setCreateError("Password must be at least 8 characters."); return; }
-    if (role !== "super_admin" && !clinicId) { setCreateError("Please select a clinic for this user."); return; }
-    setCreating(true);
-    setCreateError("");
-    try {
-      await onCreateUser({ name, email, password, role, clinicId: clinicId || null, title });
-      setShowModal(false);
-      resetForm();
-    } catch (e) {
-      setCreateError(e.message);
-    }
-    setCreating(false);
-  };
-
-  const filtered = profiles.filter(p => {
-    const matchSearch = p.name?.toLowerCase().includes(search.toLowerCase()) || p.email?.toLowerCase().includes(search.toLowerCase());
-    const matchRole = filterRole === "all" || p.role === filterRole;
-    return matchSearch && matchRole;
-  });
-
-  const roleCounts = profiles.reduce((acc, p) => { acc[p.role] = (acc[p.role] || 0) + 1; return acc; }, {});
-
   return (
     <div>
-      <PageHead title="All Users" subtitle={`${profiles.length} across all tenants`}
-        actions={<Btn size="sm" onClick={() => { resetForm(); setShowModal(true); }}>+ Create User</Btn>} />
-
+      <PageHead title="All Users" subtitle={`${profiles.length} across all tenants`} />
       <div style={{ padding: "24px 36px" }}>
-        {/* Stats row */}
-        <div style={{ display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" }}>
-          {[
-            ["All", profiles.length, DS.colors.ink, "all"],
-            ["Super Admins", roleCounts.super_admin || 0, "#B45309", "super_admin"],
-            ["Clinic Admins", roleCounts.clinic_admin || 0, DS.colors.purple, "clinic_admin"],
-            ["Staff", roleCounts.clinic_staff || 0, DS.colors.blue, "clinic_staff"],
-            ["Patients", roleCounts.patient || 0, DS.colors.success, "patient"],
-          ].map(([label, count, color, key]) => (
-            <button key={key} onClick={() => setFilterRole(key)}
-              style={{ flex: 1, minWidth: 100, padding: "12px 16px", borderRadius: DS.radius.md, border: `1.5px solid ${filterRole === key ? color : DS.colors.border}`, background: filterRole === key ? color + "12" : DS.colors.white, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "left" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: filterRole === key ? color : DS.colors.ink }}>{count}</div>
-              <div style={{ fontSize: 11, color: DS.colors.muted, fontWeight: 500 }}>{label}</div>
-            </button>
-          ))}
-        </div>
-
-        {/* Search */}
-        <Input value={search} onChange={setSearch} placeholder="Search by name or email..." style={{ marginBottom: 16 }} />
-
-        {/* User list */}
         <Card style={{ padding: 0 }}>
-          {filtered.length === 0 && (
-            <div style={{ padding: 32, textAlign: "center", color: DS.colors.muted }}>No users found</div>
-          )}
-          {filtered.map((u, idx) => (
-            <div key={u.id} style={{ padding: "14px 20px", borderBottom: idx < filtered.length - 1 ? `1px solid ${DS.colors.border}` : "none", display: "flex", alignItems: "center", gap: 14 }}>
-              <Avatar name={u.name} size={36} color={roleColors[u.role]} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: DS.colors.ink }}>{u.name || "—"}</div>
+          {profiles.map((u, idx) => (
+            <div key={u.id} style={{ padding: "13px 20px", borderBottom: idx < profiles.length - 1 ? `1px solid ${DS.colors.border}` : "none", display: "flex", alignItems: "center", gap: 14 }}>
+              <Avatar name={u.name} size={30} color={roleColors[u.role]} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
                 <div style={{ fontSize: 12, color: DS.colors.muted }}>{u.email || "—"}</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <Chip color={roleColors[u.role]}>{u.role?.replace(/_/g, " ")}</Chip>
-                <div style={{ fontSize: 12, color: DS.colors.muted, minWidth: 120, textAlign: "right" }}>
-                  {u.clinics?.clinic_name || "Platform"}
-                </div>
-                <button onClick={() => onDeleteUser(u.id, u.name)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.muted, fontSize: 16, padding: "2px 6px", borderRadius: DS.radius.sm, lineHeight: 1 }}
-                  title="Delete user">✕</button>
-              </div>
+              <Chip color={roleColors[u.role]}>{u.role?.replace("_", " ")}</Chip>
+              <div style={{ fontSize: 12, color: DS.colors.muted }}>{u.clinics?.clinic_name || "Platform"}</div>
             </div>
           ))}
         </Card>
       </div>
-
-      {/* Create User Modal */}
-      <Modal open={showModal} onClose={() => { setShowModal(false); resetForm(); }} title="Create New User" subtitle="User can log in immediately after creation" width={500}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-          {/* Role selector — shown first so clinic field shows/hides correctly */}
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Role</label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-              {[
-                ["super_admin", "Super Admin", "#B45309"],
-                ["clinic_admin", "Clinic Admin", DS.colors.purple],
-                ["clinic_staff", "Staff", DS.colors.blue],
-                ["patient", "Patient", DS.colors.success],
-              ].map(([val, lbl, color]) => (
-                <button key={val} onClick={() => setRole(val)}
-                  style={{ padding: "9px 6px", borderRadius: DS.radius.md, border: `1.5px solid ${role === val ? color : DS.colors.border}`, background: role === val ? color + "12" : DS.colors.white, color: role === val ? color : DS.colors.ink, fontSize: 11.5, fontWeight: role === val ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "center" }}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Input label="Full Name" value={name} onChange={setName} placeholder="Dr. Sarah Chen" required />
-          <Input label="Email Address" value={email} onChange={setEmail} type="email" placeholder="doctor@clinic.com" required />
-          <Input label="Password" value={password} onChange={setPassword} type="password" placeholder="Min 8 characters" required
-            helper="User can change this after logging in" />
-          <Input label="Title (optional)" value={title} onChange={setTitle} placeholder="Medical Director, Care Coordinator..." />
-
-          {/* Clinic selector — hidden for super_admin */}
-          {role !== "super_admin" && (
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>
-                Clinic <span style={{ color: DS.colors.danger }}>*</span>
-              </label>
-              <select value={clinicId} onChange={e => setClinicId(e.target.value)}
-                style={{ width: "100%", padding: "11px 14px", borderRadius: DS.radius.md, border: `1.5px solid ${DS.colors.border}`, fontSize: 14, fontFamily: DS.fonts.body, background: "#FAFAF8", color: DS.colors.ink, outline: "none" }}>
-                <option value="">Select a clinic...</option>
-                {clinics.filter(c => c.is_active).map(c => (
-                  <option key={c.id} value={c.id}>{c.clinic_name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {createError && (
-            <div style={{ background: "#FFF5F5", border: "1px solid #FECACA", borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 13, color: DS.colors.danger }}>
-              {createError}
-            </div>
-          )}
-
-          {/* Summary preview */}
-          {name && email && (
-            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "12px 14px", fontSize: 13, color: DS.colors.muted, lineHeight: 1.6 }}>
-              Creating <strong style={{ color: DS.colors.ink }}>{name}</strong> as <strong style={{ color: DS.colors.ink }}>{role.replace(/_/g, " ")}</strong>
-              {clinicId && clinics.find(c => c.id === clinicId) && (
-                <> at <strong style={{ color: DS.colors.ink }}>{clinics.find(c => c.id === clinicId).clinic_name}</strong></>
-              )}
-            </div>
-          )}
-
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
-            <Btn variant="secondary" onClick={() => { setShowModal(false); resetForm(); }}>Cancel</Btn>
-            <Btn onClick={doCreate} loading={creating} disabled={!name || !email || !password}>
-              Create User
-            </Btn>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -2064,7 +1862,7 @@ function HomePage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 40, textAlign: "center" }}>
       <div style={{ width: 64, height: 64, borderRadius: DS.radius.lg, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 24, marginBottom: 24 }}>RF</div>
-      <h1 style={{ fontSize: 40, fontWeight: 700, color: DS.colors.ink, margin: "0 0 14px", letterSpacing: "-1px", fontFamily: DS.fonts.display }}>Klyrix</h1>
+      <h1 style={{ fontSize: 40, fontWeight: 700, color: DS.colors.ink, margin: "0 0 14px", letterSpacing: "-1px", fontFamily: DS.fonts.display }}>RegenFlow</h1>
       <p style={{ fontSize: 18, color: DS.colors.muted, maxWidth: 480, margin: "0 0 36px", lineHeight: 1.6 }}>Modern patient engagement for regenerative medicine clinics.</p>
       <div style={{ display: "flex", gap: 14 }}>
         <Btn size="lg" onClick={() => setPage("login")}>Sign In</Btn>
