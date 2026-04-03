@@ -2064,7 +2064,7 @@ function HomePage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 40, textAlign: "center" }}>
       <div style={{ width: 64, height: 64, borderRadius: DS.radius.lg, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 24, marginBottom: 24 }}>RF</div>
-      <h1 style={{ fontSize: 40, fontWeight: 700, color: DS.colors.ink, margin: "0 0 14px", letterSpacing: "-1px", fontFamily: DS.fonts.display }}>RegenNumber</h1>
+      <h1 style={{ fontSize: 40, fontWeight: 700, color: DS.colors.ink, margin: "0 0 14px", letterSpacing: "-1px", fontFamily: DS.fonts.display }}>Klyrix</h1>
       <p style={{ fontSize: 18, color: DS.colors.muted, maxWidth: 480, margin: "0 0 36px", lineHeight: 1.6 }}>Modern patient engagement for regenerative medicine clinics.</p>
       <div style={{ display: "flex", gap: 14 }}>
         <Btn size="lg" onClick={() => setPage("login")}>Sign In</Btn>
