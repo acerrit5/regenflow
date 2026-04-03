@@ -1,26 +1,8 @@
-import { useState, useEffect, createContext, useContext, useRef, useCallback } from "react";
-import {
-  supabase,
-  signIn, signOut, signUp, getSession, onAuthStateChange,
-  getProfile, updateProfile,
-  getClinicPatients, getClinicStaff,
-  getAllClinics, getClinic, createClinic, updateClinic, toggleClinicActive,
-  getPatientTasks, getClinicTasks, updateTaskStatus, createTask,
-  getPatientAppointments, getClinicAppointments, createAppointment, updateAppointmentStatus,
-  getPatientNotes, addPatientNote,
-  getClinicIntakeForms, createIntakeForm, updateIntakeForm, submitIntakeResponse, getIntakeResponse,
-  getClinicConsentForms, getPatientConsentStatus, signConsent,
-  getClinicInstructions,
-  getClinicReminders, sendReminder,
-  getClinicUploadRequests, getPatientUploadRequests, createUploadRequest, markUploadReviewed,
-  submitFollowupResponse, getPatientFollowups, getClinicFollowups,
-  getClinicInsights, dismissInsight,
-  logAction,
-} from "./lib/supabase";
+import { useState, useEffect, createContext, useContext, useRef } from "react";
 
-// ─────────────────────────────────────────────────────────────
-// DESIGN SYSTEM  (unchanged from original)
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// DESIGN SYSTEM
+// ─────────────────────────────────────────────────────────
 const DS = {
   fonts: {
     display: "'Cormorant Garamond', 'Didot', 'Big Caslon', Georgia, serif",
@@ -55,6 +37,7 @@ const DS = {
   },
 };
 
+// Google Fonts loader
 const FontLoader = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500;600;700&display=swap');
@@ -67,45 +50,140 @@ const FontLoader = () => (
     @keyframes slideIn{from{opacity:0;transform:translateX(-12px);}to{opacity:1;transform:translateX(0);}}
     @keyframes slideInLeft{from{opacity:0;transform:translateX(-100%);}to{opacity:1;transform:translateX(0);}}
     @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.5;}}
+    @keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}
     @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
     .anim-fade-up{animation:fadeUp 0.5s ease forwards;}
     .anim-slide{animation:slideIn 0.3s ease forwards;}
     .patient-row:hover{background:#F7F7F5 !important;}
+    .patient-row:active{background:#F0F0EC !important;}
     input,textarea,select{font-family:${DS.fonts.body};}
     button{font-family:${DS.fonts.body};}
     @media(max-width:768px){
       .hide-mobile{display:none !important;}
       .stack-mobile{flex-direction:column !important;}
       .grid-1-mobile{grid-template-columns:1fr !important;}
+      .grid-2-mobile{grid-template-columns:1fr 1fr !important;}
       .pad-mobile{padding:16px !important;}
-      .pad-h-mobile{padding-left:16px !important;padding-right:16px !important;}
+      .pad-h-mobile{padding-left:16px !important; padding-right:16px !important;}
     }
   `}</style>
 );
 
+// Responsive hook
 function useIsMobile() {
   const [mobile, setMobile] = useState(window.innerWidth <= 768);
   const [isTablet, setIsTablet] = useState(window.innerWidth <= 1024 && window.innerWidth > 768);
   useEffect(() => {
-    const h = () => { setMobile(window.innerWidth <= 768); setIsTablet(window.innerWidth <= 1024 && window.innerWidth > 768); };
+    const h = () => {
+      setMobile(window.innerWidth <= 768);
+      setIsTablet(window.innerWidth <= 1024 && window.innerWidth > 768);
+    };
     window.addEventListener("resize", h);
     return () => window.removeEventListener("resize", h);
   }, []);
   return { isMobile: mobile, isTablet, isSmall: mobile || isTablet };
 }
 
-// ─────────────────────────────────────────────────────────────
-// CONTEXT
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// SEED DATA
+// ─────────────────────────────────────────────────────────
+const SEED = {
+  clinics: [
+    { id: "clinic_1", clinic_name: "Precision Pointe Regenerative", clinic_slug: "precisionpointe", primary_color: "#1C4532", secondary_color: "#E8F0EC", accent_color: "#C8A96A", contact_email: "jenny@precisionpointehealth.com", contact_phone: "(801) 613-8002", address: "11760 S 700 E, Suite 212, Salt Lake City, UT 84094", plan_type: "pro", is_active: true, portal_title: "Precision Pointe Patient Portal", tagline: "Personalized regenerative care for peak vitality." },
+    { id: "clinic_2", clinic_name: "Luminary Longevity", clinic_slug: "luminary", primary_color: "#1D2B5C", secondary_color: "#EEF0FB", accent_color: "#7C9BCC", contact_email: "care@luminarylongevity.com", contact_phone: "(310) 555-0847", address: "9420 Wilshire Blvd, Beverly Hills, CA 90212", plan_type: "pro", is_active: true, portal_title: "Luminary Longevity Patient Portal", tagline: "Optimize your biology. Extend your vitality." },
+  ],
+  users: [
+    { id: "user_super", email: "admin@regenflow.io", password: "demo1234", name: "Alex Morgan", role: "super_admin", clinic_id: null },
+    { id: "user_ca1", email: "admin@precisionpointe.com", password: "demo1234", name: "Dr. Sarah Chen", role: "clinic_admin", clinic_id: "clinic_1", title: "Medical Director" },
+    { id: "user_s1a", email: "staff1@precisionpointe.com", password: "demo1234", name: "Marcus Webb", role: "clinic_staff", clinic_id: "clinic_1", title: "Care Coordinator" },
+    { id: "user_s1b", email: "staff2@precisionpointe.com", password: "demo1234", name: "Priya Nair", role: "clinic_staff", clinic_id: "clinic_1", title: "Front Desk" },
+    { id: "user_ca2", email: "admin@luminary.com", password: "demo1234", name: "Dr. James Holloway", role: "clinic_admin", clinic_id: "clinic_2", title: "CMO" },
+    { id: "pat_1", email: "patient@demo.com", password: "demo1234", name: "Jordan Rivera", role: "patient", clinic_id: "clinic_1", phone: "(602) 555-0381", dob: "1985-07-14", joined: "2024-11-03", treatment: "PRP Knee Therapy" },
+    { id: "pat_2", email: "patient2@demo.com", password: "demo1234", name: "Taylor Brooks", role: "patient", clinic_id: "clinic_1", phone: "(480) 555-0224", dob: "1979-03-22", joined: "2024-12-10", treatment: "Stem Cell - Shoulder" },
+    { id: "pat_3", email: "patient3@demo.com", password: "demo1234", name: "Morgan Ellis", role: "patient", clinic_id: "clinic_1", phone: "(602) 555-0915", dob: "1991-11-05", joined: "2025-01-18", treatment: "Shockwave Therapy" },
+  ],
+  tasks: {
+    pat_1: [
+      { id: "t1", title: "Complete Medical History Form", type: "intake", status: "completed", due: "2025-01-10", completed_at: "2025-01-09" },
+      { id: "t2", title: "Sign PRP Consent Agreement", type: "consent", status: "completed", due: "2025-01-10", completed_at: "2025-01-09" },
+      { id: "t3", title: "Upload Recent Lab Results", type: "upload", status: "in_progress", due: "2025-01-15" },
+      { id: "t4", title: "Pre-Treatment Instructions Review", type: "instructions", status: "not_started", due: "2025-01-16" },
+      { id: "t5", title: "48-Hour Post-Treatment Check-In", type: "followup", status: "not_started", due: "2025-01-22" },
+    ],
+    pat_2: [
+      { id: "t6", title: "Complete Medical History Form", type: "intake", status: "completed", due: "2024-12-15", completed_at: "2024-12-14" },
+      { id: "t7", title: "Sign Stem Cell Consent Agreement", type: "consent", status: "in_progress", due: "2024-12-20" },
+      { id: "t8", title: "Upload MRI or Imaging Results", type: "upload", status: "not_started", due: "2024-12-22" },
+    ],
+    pat_3: [
+      { id: "t9", title: "Complete Intake Form", type: "intake", status: "not_started", due: "2025-01-25" },
+      { id: "t10", title: "Sign General Consent", type: "consent", status: "not_started", due: "2025-01-25" },
+    ],
+  },
+  intakeForms: [{
+    id: "form_1", clinic_id: "clinic_1", title: "New Patient Medical History",
+    description: "Please complete all fields prior to your first appointment. This helps our team personalize your regenerative care plan.",
+    fields: [
+      { id: "f1", label: "Full Legal Name", type: "text", required: true },
+      { id: "f2", label: "Date of Birth", type: "date", required: true },
+      { id: "f3", label: "Primary Concern / Reason for Visit", type: "textarea", required: true },
+      { id: "f4", label: "Current Medications (list all)", type: "textarea", required: false },
+      { id: "f5", label: "Known Allergies", type: "text", required: false },
+      { id: "f6", label: "Previous Surgeries or Procedures", type: "textarea", required: false },
+      { id: "f7", label: "Do you have any active infections or illnesses?", type: "radio", options: ["Yes", "No"], required: true },
+      { id: "f8", label: "Pain Level at Rest (1–10)", type: "text", required: false },
+      { id: "f9", label: "Pain Level During Activity (1–10)", type: "text", required: false },
+    ],
+  }],
+  consentForms: [
+    {
+      id: "consent_1", clinic_id: "clinic_1", title: "PRP Therapy Informed Consent",
+      content: `PLATELET-RICH PLASMA (PRP) THERAPY INFORMED CONSENT\n\nI, the undersigned, hereby consent to the performance of Platelet-Rich Plasma (PRP) therapy procedures by the medical staff at Precision Pointe Regenerative Health.\n\nNATURE OF PROCEDURE: PRP therapy involves drawing a small amount of my blood, processing it to concentrate the platelets, and injecting or applying the resulting solution to the treatment area.\n\nRISKS AND BENEFITS: I have been informed of the potential risks including temporary discomfort at the injection site, swelling, bruising, and infection (rare). Individual results vary and no guarantee of specific outcomes is made.\n\nALTERNATIVES: I understand that alternative treatments are available and that I have the right to refuse this procedure.\n\nFINANCIAL ACKNOWLEDGMENT: I understand that PRP therapy may not be covered by insurance, and I agree to be responsible for payment.\n\nBy signing below, I confirm that I have read, understood, and voluntarily agree to proceed with PRP therapy.`,
+    },
+    {
+      id: "consent_2", clinic_id: "clinic_1", title: "Stem Cell Therapy Informed Consent",
+      content: `STEM CELL THERAPY INFORMED CONSENT\n\nI, the undersigned, hereby consent to the performance of Stem Cell Therapy procedures by the medical staff at Precision Pointe Regenerative Health.\n\nNATURE OF PROCEDURE: Stem cell therapy involves harvesting mesenchymal stem cells from the patient's own bone marrow, processing them, and injecting the concentrated solution into the treatment area to stimulate natural tissue regeneration.\n\nRISKS AND BENEFITS: Potential risks include temporary discomfort at the harvest and injection sites, swelling, bruising, and rare risk of infection. Individual results vary and no guarantee of specific outcomes is made.\n\nHARVEST PROCEDURE: The bone marrow harvest takes approximately 15 minutes and is performed in-office. The harvest site may be sore for a few days following the procedure.\n\nFINANCIAL ACKNOWLEDGMENT: I understand that stem cell therapy is not covered by most insurance plans, and I agree to be responsible for payment.\n\nBy signing below, I confirm that I have read, understood, and voluntarily agree to proceed with Stem Cell Therapy.`,
+    },
+    {
+      id: "consent_3", clinic_id: "clinic_1", title: "General Treatment Consent",
+      content: `GENERAL TREATMENT INFORMED CONSENT\n\nI, the undersigned, hereby consent to the evaluation and treatment by the medical staff at Precision Pointe Regenerative Health.\n\nI understand that the proposed treatment will be explained to me and that I have the right to ask questions, refuse treatment, or withdraw consent at any time.\n\nI authorize the clinic to perform examinations and treatments as deemed necessary and appropriate by my care team.\n\nBy signing below, I confirm that I have read and understood this general consent form.`,
+    }
+  ],
+  instructions: [
+    { id: "instr_1", clinic_id: "clinic_1", title: "Pre-Treatment Instructions", type: "pre_visit", content: ["Stay well-hydrated — drink at least 64 oz of water the day before your appointment.", "Avoid anti-inflammatory medications (ibuprofen, aspirin, naproxen) for 7 days prior.", "Do not use topical numbing creams unless prescribed by our team.", "Eat a light meal 1–2 hours before your appointment.", "Wear comfortable, loose-fitting clothing that allows easy access to the treatment area.", "Arrive 15 minutes early to complete any remaining paperwork."] },
+    { id: "instr_2", clinic_id: "clinic_1", title: "Post-Treatment Care", type: "post_visit", content: ["Avoid strenuous exercise for 48 hours following treatment.", "Do not apply ice or heat to the treated area for 72 hours.", "Continue to avoid anti-inflammatory medications for 2 weeks post-treatment.", "Some soreness and mild swelling is normal and expected.", "Contact our office immediately if you experience severe pain, fever, or signs of infection.", "Schedule your follow-up appointment within 4–6 weeks."] },
+    { id: "instr_3", clinic_id: "clinic_1", title: "Shockwave Therapy — Before Your Session", type: "pre_visit", content: ["No special preparation is required for shockwave therapy.", "Wear comfortable clothing that allows easy access to the treatment area.", "Avoid applying lotions or creams to the area being treated.", "If you experience significant pain in the treatment area, let your provider know before the session.", "Arrive 10 minutes early to discuss your progress with your care team."] },
+    { id: "instr_4", clinic_id: "clinic_1", title: "Shockwave Therapy — After Your Session", type: "post_visit", content: ["Some mild soreness and redness at the treatment site is normal and expected.", "Apply ice for 15–20 minutes if the area is particularly sore.", "Avoid intense physical activity for 24–48 hours following treatment.", "Most patients receive 3–6 sessions spaced 1 week apart for optimal results.", "Contact us if you experience any unusual side effects or worsening symptoms."] },
+  ],
+  notes: [
+    { id: "note_1", patient_id: "pat_1", staff_id: "user_s1a", content: "Patient called to confirm appointment. Mentioned mild knee discomfort increasing during stairs. Reminded to avoid NSAIDs.", created_at: "2025-01-08T14:22:00Z" },
+    { id: "note_2", patient_id: "pat_1", staff_id: "user_ca1", content: "Reviewed uploaded labs. All within acceptable range for PRP candidacy. Cleared for treatment on Jan 20.", created_at: "2025-01-10T09:15:00Z" },
+    { id: "note_3", patient_id: "pat_2", staff_id: "user_s1a", content: "Consent form pending — sent follow-up reminder via email and SMS.", created_at: "2024-12-18T11:05:00Z" },
+  ],
+  appointments: [
+    { id: "appt_1", patient_id: "pat_1", clinic_id: "clinic_1", requested_date: "2025-01-20", requested_time: "10:00 AM", reason: "PRP Knee Treatment — Initial Session", status: "confirmed", created_at: "2025-01-09T16:30:00Z" },
+    { id: "appt_2", patient_id: "pat_2", clinic_id: "clinic_1", requested_date: "2025-01-28", requested_time: "2:00 PM", reason: "Stem Cell Consultation — Shoulder", status: "pending", created_at: "2024-12-19T10:00:00Z" },
+  ],
+  aiInsights: [
+    { id: "ai_1", patient_id: "pat_1", type: "risk", message: "Jordan has an incomplete upload task 6 days past due. Risk of delayed treatment clearance.", action: "Send reminder", severity: "medium" },
+    { id: "ai_2", patient_id: "pat_2", type: "engagement", message: "Taylor's consent form has been pending for 8 days. Send a personalized follow-up.", action: "Draft message", severity: "high" },
+    { id: "ai_3", patient_id: "pat_3", type: "onboarding", message: "Morgan Ellis just created an account. No tasks started. Recommend welcome sequence.", action: "Trigger welcome", severity: "low" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────
+// CONTEXT & HELPERS
+// ─────────────────────────────────────────────────────────
 const AppCtx = createContext(null);
 const useApp = () => useContext(AppCtx);
-
+const getClinic = (id) => SEED.clinics.find(c => c.id === id);
+const getClinicPatients = (clinicId) => SEED.users.filter(u => u.role === "patient" && u.clinic_id === clinicId);
 const statusColor = s => ({ completed: DS.colors.success, in_progress: DS.colors.warning, not_started: "#C4C4C0" }[s] || "#C4C4C0");
 const statusLabel = s => ({ completed: "Completed", in_progress: "In Progress", not_started: "Not Started" }[s] || s);
 
-// ─────────────────────────────────────────────────────────────
-// PRIMITIVES  (Avatar, Chip, Card, Btn, Input, Textarea — identical to original)
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// PRIMITIVES
+// ─────────────────────────────────────────────────────────
 function Avatar({ name = "", size = 36, color = DS.colors.primary }) {
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -125,11 +203,13 @@ function Chip({ children, color = DS.colors.primary, dot = false, size = "sm" })
   );
 }
 
-function Card({ children, style = {}, onClick }) {
+function Card({ children, style = {}, onClick, hover = false }) {
   const [hov, setHov] = useState(false);
   return (
-    <div onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ background: DS.colors.white, borderRadius: DS.radius.lg, border: `1px solid ${DS.colors.border}`, boxShadow: hov && onClick ? DS.shadow.lg : DS.shadow.sm, padding: 24, transition: "all 0.2s ease", cursor: onClick ? "pointer" : "default", ...style }}>
+    <div onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{ background: DS.colors.white, borderRadius: DS.radius.lg, border: `1px solid ${DS.colors.border}`, boxShadow: hov && (onClick || hover) ? DS.shadow.lg : DS.shadow.sm, padding: 24, transition: "all 0.2s ease", cursor: onClick ? "pointer" : "default", ...style }}>
       {children}
     </div>
   );
@@ -142,11 +222,16 @@ function Btn({ children, onClick, variant = "primary", style = {}, disabled = fa
     primary: { background: hov ? DS.colors.primaryMid : DS.colors.primary, color: "#fff", border: "none", boxShadow: hov ? DS.shadow.md : "none" },
     secondary: { background: hov ? "#F0F0EC" : DS.colors.surface, color: DS.colors.ink, border: `1px solid ${DS.colors.border}` },
     ghost: { background: "transparent", color: DS.colors.muted, border: "none" },
+    outline: { background: "transparent", color: DS.colors.primary, border: `1.5px solid ${DS.colors.primary}` },
     danger: { background: hov ? "#FEE2E2" : "#FFF5F5", color: DS.colors.danger, border: `1px solid #FECACA` },
-    accent: { background: hov ? "#B8953A" : DS.colors.accent, color: "#fff", border: "none" },
+    accent: { background: hov ? "#B8953A" : DS.colors.accent, color: "#fff", border: "none", boxShadow: hov ? DS.shadow.md : "none" },
+    ai: { background: hov ? "#0F3626" : DS.colors.primary, color: "#fff", border: "none", boxShadow: `0 0 0 1px ${DS.colors.accent}40` },
   };
   return (
-    <button disabled={disabled || loading} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} onClick={onClick}
+    <button disabled={disabled || loading}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      onClick={onClick}
       style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, fontFamily: DS.fonts.body, fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", outline: "none", transition: "all 0.15s ease", opacity: disabled ? 0.55 : 1, letterSpacing: "0.01em", ...sizes[size], ...variants[variant], ...style }}>
       {loading ? <span style={{ width: 14, height: 14, border: "2px solid currentColor", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite", display: "inline-block" }} /> : children}
     </button>
@@ -179,390 +264,132 @@ function Textarea({ label, value, onChange, placeholder, required, rows = 4, sty
   );
 }
 
-function Modal({ open, onClose, title, subtitle, children, width = 480 }) {
-  useEffect(() => { if (open) document.body.style.overflow = "hidden"; else document.body.style.overflow = ""; return () => { document.body.style.overflow = ""; }; }, [open]);
-  if (!open) return null;
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.45)", backdropFilter: "blur(4px)" }} onClick={onClose} />
-      <div style={{ position: "relative", background: DS.colors.white, borderRadius: DS.radius.xl, boxShadow: DS.shadow.xl, width: "100%", maxWidth: width, maxHeight: "90vh", overflowY: "auto", animation: "fadeUp 0.25s ease" }}>
-        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: DS.colors.ink }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 13, color: DS.colors.muted, marginTop: 3 }}>{subtitle}</div>}
-          </div>
-          <button onClick={onClose} style={{ background: DS.colors.surface, border: `1px solid ${DS.colors.border}`, borderRadius: DS.radius.md, cursor: "pointer", padding: "5px 8px", color: DS.colors.muted }}>✕</button>
-        </div>
-        <div style={{ padding: "20px 24px 24px" }}>{children}</div>
-      </div>
-    </div>
-  );
-}
+// ─────────────────────────────────────────────────────────
+// ICONS
+// ─────────────────────────────────────────────────────────
+const I = {
+  home: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
+  user: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  check: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  forms: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  shield: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
+  upload: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>,
+  calendar: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+  info: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  msg: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  refresh: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
+  patients: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  settings: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
+  bell: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>,
+  logout: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  ai: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  chart: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+  clinic: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12h6M12 9v6"/></svg>,
+  note: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  arrow: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>,
+  spark: <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.4 2.4-7.4L2 9.4h7.6z"/></svg>,
+  zap: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
+};
 
-function PageHead({ title, subtitle, actions, eyebrow }) {
-  const { isMobile } = useIsMobile();
-  return (
-    <div style={{ padding: isMobile ? "16px 16px 14px" : "28px 36px 22px", borderBottom: `1px solid ${DS.colors.border}`, background: DS.colors.white, display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 0 }}>
-      <div>
-        {eyebrow && <div style={{ fontSize: 11, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{eyebrow}</div>}
-        <h1 style={{ margin: 0, fontSize: isMobile ? 18 : 22, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.4px" }}>{title}</h1>
-        {subtitle && <p style={{ margin: "3px 0 0", fontSize: 13, color: DS.colors.muted }}>{subtitle}</p>}
-      </div>
-      {actions && <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{actions}</div>}
-    </div>
-  );
-}
-
-// Loading spinner used throughout
-function Spinner({ size = 24, color = DS.colors.primary }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
-      <div style={{ width: size, height: size, border: `2.5px solid ${color}20`, borderTopColor: color, borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// APP PROVIDER  — replaces all useState(SEED.*) with Supabase
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// APP PROVIDER
+// ─────────────────────────────────────────────────────────
 function AppProvider({ children }) {
   const [page, setPage] = useState("home");
-  const [authUser, setAuthUser] = useState(null);       // raw Supabase auth user
-  const [profile, setProfile] = useState(null);         // profiles row (includes clinic)
-  const [authLoading, setAuthLoading] = useState(true); // true while session is being checked
+  const [currentUser, setCurrentUser] = useState(null);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [toast, setToast] = useState(null);
+  const [tasks, setTasks] = useState(SEED.tasks);
+  const [notes, setNotes] = useState(SEED.notes);
+  const [appointments, setAppointments] = useState(SEED.appointments);
+  const [reminderLog, setReminderLog] = useState([
+    { id: "rl1", patient_id: "pat_1", type: "intake", channel: "Email", message: "Please complete your intake form before your appointment.", sent_by: "user_s1a", sent_at: "2025-01-07T10:00:00Z", status: "delivered" },
+    { id: "rl2", patient_id: "pat_2", type: "consent", channel: "Email + SMS", message: "Your consent form is pending signature.", sent_by: "user_s1a", sent_at: "2024-12-18T11:05:00Z", status: "delivered" },
+  ]);
+  const [uploadRequests, setUploadRequests] = useState([
+    { id: "ur1", patient_id: "pat_1", label: "Recent Lab Results", message: "Please upload your most recent bloodwork or lab results.", requested_by: "user_ca1", requested_at: "2025-01-08T09:00:00Z", status: "fulfilled" },
+  ]);
   const [aiThinking, setAiThinking] = useState(false);
   const [aiChat, setAiChat] = useState([]);
 
-  const clinic = profile?.clinics ?? null;
-  const currentUser = profile;
+  const clinic = currentUser ? getClinic(currentUser.clinic_id) : null;
   const primaryColor = clinic?.primary_color || DS.colors.primary;
 
-  const showToast = useCallback((msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  }, []);
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
-  // ── Session bootstrap ────────────────────────────────────
-  useEffect(() => {
-    let mounted = true;
-
-    getSession().then(async session => {
-      if (!mounted) return;
-      if (session?.user) {
-        setAuthUser(session.user);
-        const p = await getProfile(session.user.id);
-        if (mounted) {
-          setProfile(p);
-          if (p) navigateByRole(p.role);
-        }
-      }
-      if (mounted) setAuthLoading(false);
-    });
-
-    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-      if (event === "SIGNED_IN" && session?.user) {
-        setAuthUser(session.user);
-        const p = await getProfile(session.user.id);
-        if (mounted) {
-          setProfile(p);
-          if (p) navigateByRole(p.role);
-        }
-      } else if (event === "SIGNED_OUT") {
-        setAuthUser(null);
-        setProfile(null);
-        setPage("home");
-        setAiChat([]);
-      }
-    });
-
-    return () => { mounted = false; subscription.unsubscribe(); };
-  }, []);
-
-  function navigateByRole(role) {
-    if (role === "patient") setPage("patient_dashboard");
-    else if (role === "super_admin") setPage("sa_dashboard");
+  const login = (email, pw) => {
+    const user = SEED.users.find(u => u.email === email && u.password === pw);
+    if (!user) return false;
+    setCurrentUser(user);
+    if (user.role === "patient") setPage("patient_dashboard");
+    else if (user.role === "super_admin") setPage("sa_dashboard");
     else setPage("admin_dashboard");
-  }
+    return true;
+  };
 
-  // ── Auth actions ─────────────────────────────────────────
-  const login = useCallback(async (email, password) => {
-    const { profile: p, error } = await signIn(email, password);
-    if (error) return { error: error.message };
-    if (!p) return { error: "Profile not found. Please contact support." };
-    setProfile(p);
-    logAction({ actorId: p.id, clinicId: p.clinic_id, action: "login" });
-    return { error: null };
-  }, []);
+  const logout = () => { setCurrentUser(null); setPage("home"); setAiChat([]); };
 
-  const logout = useCallback(async () => {
-    if (profile) logAction({ actorId: profile.id, clinicId: profile.clinic_id, action: "logout" });
-    await signOut();
-  }, [profile]);
+  const updateTask = (patId, taskId, status) => {
+    setTasks(prev => ({ ...prev, [patId]: (prev[patId] || []).map(t => t.id === taskId ? { ...t, status, completed_at: status === "completed" ? new Date().toISOString() : undefined } : t) }));
+    showToast("Task updated");
+  };
 
-  const registerPatient = useCallback(async ({ email, password, name, clinicId }) => {
-    const { error } = await signUp({ email, password, name, clinicId, role: "patient" });
-    if (error) return { error: error.message };
-    return { error: null };
-  }, []);
+  const addNote = (pid, content) => {
+    setNotes(prev => [...prev, { id: "n_" + Date.now(), patient_id: pid, staff_id: currentUser.id, content, created_at: new Date().toISOString() }]);
+    showToast("Note saved");
+  };
 
-  // ── Task helpers ─────────────────────────────────────────
-  const doUpdateTask = useCallback(async (taskId, status) => {
-    try {
-      await updateTaskStatus(taskId, status);
-      logAction({ actorId: profile?.id, clinicId: profile?.clinic_id, action: "update_task", resource: "tasks", resourceId: taskId, meta: { status } });
-      showToast("Task updated");
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  }, [profile, showToast]);
+  const addAppointment = (pid, data) => {
+    setAppointments(prev => [...prev, { id: "a_" + Date.now(), patient_id: pid, clinic_id: currentUser.clinic_id, ...data, status: "pending", created_at: new Date().toISOString() }]);
+    showToast("Appointment request submitted");
+  };
 
-  const doAddNote = useCallback(async (patientId, content) => {
-    try {
-      const note = await addPatientNote({ patientId, clinicId: profile.clinic_id, staffId: profile.id, content });
-      logAction({ actorId: profile.id, clinicId: profile.clinic_id, action: "add_note", resource: "patient_notes", resourceId: note.id });
-      showToast("Note saved");
-      return note;
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  }, [profile, showToast]);
+  const addReminderLog = (patientId, data) => {
+    const entry = { id: "rl_" + Date.now(), patient_id: patientId, sent_by: currentUser.id, sent_at: new Date().toISOString(), status: "delivered", ...data };
+    setReminderLog(prev => [entry, ...prev]);
+    showToast(`Reminder sent to ${SEED.users.find(u => u.id === patientId)?.name || "patient"}`);
+  };
 
-  const doAddAppointment = useCallback(async (patientId, data) => {
-    try {
-      const appt = await createAppointment({ patientId, clinicId: profile?.clinic_id, ...data });
-      showToast("Appointment request submitted");
-      return appt;
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  }, [profile, showToast]);
+  const addUploadRequest = (patientId, data) => {
+    const entry = { id: "ur_" + Date.now(), patient_id: patientId, requested_by: currentUser.id, requested_at: new Date().toISOString(), status: "pending", ...data };
+    setUploadRequests(prev => [entry, ...prev]);
+    // Also create a task for the patient
+    const newTask = { id: "t_" + Date.now(), title: data.label || "Requested Document Upload", type: "upload", status: "not_started", due: data.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0] };
+    setTasks(prev => ({ ...prev, [patientId]: [...(prev[patientId] || []), newTask] }));
+    showToast(`Upload request sent to ${SEED.users.find(u => u.id === patientId)?.name || "patient"}`);
+  };
 
-  const doSendReminder = useCallback(async (patientId, data) => {
-    try {
-      const reminder = await sendReminder({ patientId, clinicId: profile.clinic_id, sentBy: profile.id, ...data });
-      showToast(`Reminder sent`);
-      return reminder;
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  }, [profile, showToast]);
-
-  const doCreateUploadRequest = useCallback(async (patientId, data) => {
-    try {
-      const req = await createUploadRequest({ patientId, clinicId: profile.clinic_id, requestedBy: profile.id, ...data });
-      // Also create a task for the patient
-      await createTask({ patientId, clinicId: profile.clinic_id, title: data.label || "Upload Requested Document", taskType: "upload", dueDate: data.dueDate });
-      showToast("Upload request sent");
-      return req;
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  }, [profile, showToast]);
-
-  // ── AI assistant ─────────────────────────────────────────
-  const runAI = useCallback(async (prompt) => {
+  const runAI = async (prompt, context = "") => {
     setAiThinking(true);
     setAiChat(prev => [...prev, { role: "user", text: prompt }]);
-
-    // In production: replace this with a real Anthropic API call
-    // using the fetch pattern from the artifact API docs
-    await new Promise(r => setTimeout(r, 1200));
-    const key = prompt.toLowerCase().includes("risk") ? "risk"
-      : prompt.toLowerCase().includes("draft") || prompt.toLowerCase().includes("message") ? "draft"
-      : prompt.toLowerCase().includes("welcome") ? "welcome"
-      : "default";
+    await new Promise(r => setTimeout(r, 1400));
     const responses = {
-      risk: "I've analyzed your active patients. The highest risk is a patient with an overdue upload task blocking treatment clearance. I recommend sending a personalized SMS today.",
-      draft: "Here's a draft reminder message:\n\n'Hi [Name] — your consent form is still pending signature. It only takes 2 minutes and is required before we can confirm your appointment. [Portal Link]'",
-      welcome: "Welcome sequence triggered. I've queued: (1) branded welcome email, (2) SMS with portal link, (3) 48-hour follow-up if no tasks started.",
-      default: "Here's your clinic summary:\n\n• Review active patients with overdue tasks\n• Check pending consent forms\n• Send follow-up reminders to any patients who haven't started intake\n\nWould you like me to draft any messages or flag specific patients?",
+      "risk": "Based on Jordan Rivera's profile, I've flagged a medium-priority risk: the lab upload task is 6 days overdue. Without this clearance, we risk delaying the January 20th treatment. I recommend sending a personalized SMS reminder today.",
+      "draft": "Here's a draft message for Taylor Brooks:\n\n'Hi Taylor — just a friendly reminder that your stem cell therapy consent form is still pending your signature. Completing this takes only 2 minutes and is required before we can confirm your appointment. Click here to sign: [portal link]. Questions? Call us at (801) 613-8002.'",
+      "welcome": "Welcome sequence triggered for Morgan Ellis. I've queued: (1) a branded welcome email, (2) an SMS with portal login link, and (3) a 48-hour follow-up if no tasks are started. Estimated task completion improvement: +65%.",
+      "default": "I've analyzed your clinic's current patient pipeline. Here's a summary:\n\n• 3 active patients across various treatment stages\n• 1 high-priority follow-up needed (Taylor Brooks — consent pending 8 days)\n• Intake completion rate this month: 67% (industry avg: 42%)\n• Recommended action: Enable automated 3-day consent reminder sequence\n\nWould you like me to draft any outreach messages or flag specific patients?",
     };
+    const key = prompt.toLowerCase().includes("risk") ? "risk" : prompt.toLowerCase().includes("draft") || prompt.toLowerCase().includes("message") ? "draft" : prompt.toLowerCase().includes("welcome") || prompt.toLowerCase().includes("morgan") ? "welcome" : "default";
     setAiChat(prev => [...prev, { role: "ai", text: responses[key] }]);
     setAiThinking(false);
-  }, []);
+  };
 
   return (
-    <AppCtx.Provider value={{
-      page, setPage,
-      currentUser: profile,
-      authUser,
-      authLoading,
-      clinic,
-      primaryColor,
-      login, logout, registerPatient,
-      showToast,
-      doUpdateTask,
-      doAddNote,
-      doAddAppointment,
-      doSendReminder,
-      doCreateUploadRequest,
-      selectedPatientId, setSelectedPatientId,
-      aiThinking, aiChat, runAI,
-    }}>
+    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest }}>
       <FontLoader />
       {children}
       {toast && (
-        <div style={{ position: "fixed", bottom: 28, right: 28, background: toast.type === "success" ? DS.colors.primary : DS.colors.danger, color: "#fff", padding: "13px 22px", borderRadius: DS.radius.md, fontWeight: 600, fontSize: 13.5, zIndex: 9999, boxShadow: DS.shadow.xl, animation: "fadeUp 0.3s ease", display: "flex", alignItems: "center", gap: 8 }}>
-          {toast.type === "success" ? "✓" : "✕"} {toast.msg}
+        <div style={{ position: "fixed", bottom: 28, right: 28, background: toast.type === "success" ? DS.colors.primary : DS.colors.danger, color: "#fff", padding: "13px 22px", borderRadius: DS.radius.md, fontWeight: 600, fontSize: 13.5, zIndex: 9999, boxShadow: DS.shadow.xl, animation: "fadeUp 0.3s ease", display: "flex", alignItems: "center", gap: 8, fontFamily: DS.fonts.body }}>
+          {toast.type === "success" ? I.check : "✕"} {toast.msg}
         </div>
       )}
     </AppCtx.Provider>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// AUTH PAGES
-// ─────────────────────────────────────────────────────────────
-function LoginPage() {
-  const { login, setPage, showToast } = useApp();
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-
-  const doLogin = async () => {
-    if (!email || !pw) { setErr("Please enter your email and password."); return; }
-    setLoading(true);
-    setErr("");
-    const { error } = await login(email, pw);
-    if (error) { setErr(error); setLoading(false); }
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Sign in to RegenFlow</h1>
-          <p style={{ fontSize: 14, color: DS.colors.muted }}>Enter your credentials to continue</p>
-        </div>
-        <Card>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Input label="Email" value={email} onChange={setEmail} type="email" placeholder="you@clinic.com" onEnter={doLogin} />
-            <Input label="Password" value={pw} onChange={setPw} type="password" placeholder="••••••••" onEnter={doLogin} />
-            {err && <div style={{ background: "#FFF5F5", border: "1px solid #FECACA", borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 13, color: DS.colors.danger }}>{err}</div>}
-            <Btn onClick={doLogin} loading={loading} style={{ width: "100%", justifyContent: "center" }}>Sign In</Btn>
-            <div style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted }}>
-              <button onClick={() => setPage("forgot")} style={{ background: "none", border: "none", color: DS.colors.primary, cursor: "pointer", fontFamily: DS.fonts.body, fontSize: 13 }}>Forgot password?</button>
-            </div>
-          </div>
-        </Card>
-        <p style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted, marginTop: 20 }}>
-          Patient?{" "}
-          <button onClick={() => setPage("signup")} style={{ background: "none", border: "none", color: DS.colors.primary, cursor: "pointer", fontFamily: DS.fonts.body, fontSize: 13, fontWeight: 600 }}>Create an account</button>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function SignupPage() {
-  const { registerPatient, setPage, showToast } = useApp();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [clinicSlug, setClinicSlug] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-
-  const doSignup = async () => {
-    if (!name || !email || !pw) { setErr("Please fill in all fields."); return; }
-    if (pw.length < 8) { setErr("Password must be at least 8 characters."); return; }
-    setLoading(true);
-    setErr("");
-
-    // Look up clinic by slug to get clinic_id
-    const { data: clinics } = await supabase
-      .from("clinics")
-      .select("id")
-      .eq("clinic_slug", clinicSlug.toLowerCase().trim())
-      .single();
-
-    if (!clinics) { setErr("Clinic not found. Please check your clinic code."); setLoading(false); return; }
-
-    const { error } = await registerPatient({ email, password: pw, name, clinicId: clinics.id });
-    if (error) { setErr(error); setLoading(false); return; }
-
-    showToast("Account created! Check your email to verify.");
-    setPage("login");
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Create your patient account</h1>
-          <p style={{ fontSize: 14, color: DS.colors.muted }}>Your clinic should have given you a clinic code</p>
-        </div>
-        <Card>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Input label="Full Name" value={name} onChange={setName} placeholder="Jordan Rivera" required />
-            <Input label="Email" value={email} onChange={setEmail} type="email" placeholder="you@email.com" required />
-            <Input label="Password" value={pw} onChange={setPw} type="password" placeholder="Min 8 characters" required />
-            <Input label="Clinic Code" value={clinicSlug} onChange={setClinicSlug} placeholder="e.g. precisionpointe" helper="Given to you by your clinic" required />
-            {err && <div style={{ background: "#FFF5F5", border: "1px solid #FECACA", borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 13, color: DS.colors.danger }}>{err}</div>}
-            <Btn onClick={doSignup} loading={loading} style={{ width: "100%", justifyContent: "center" }}>Create Account</Btn>
-          </div>
-        </Card>
-        <p style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted, marginTop: 20 }}>
-          Already have an account?{" "}
-          <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: DS.colors.primary, cursor: "pointer", fontFamily: DS.fonts.body, fontSize: 13, fontWeight: 600 }}>Sign in</button>
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ForgotPage() {
-  const { setPage } = useApp();
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const doReset = async () => {
-    if (!email) return;
-    setLoading(true);
-    await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/reset-password" });
-    setSent(true);
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 20 }}>
-      <div style={{ width: "100%", maxWidth: 380 }}>
-        <Card>
-          {sent ? (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>✉️</div>
-              <div style={{ fontWeight: 700, fontSize: 18, color: DS.colors.ink, marginBottom: 8 }}>Check your email</div>
-              <div style={{ fontSize: 14, color: DS.colors.muted, marginBottom: 20 }}>We sent a password reset link to {email}</div>
-              <Btn variant="secondary" onClick={() => setPage("login")}>Back to Sign In</Btn>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 18, color: DS.colors.ink, marginBottom: 4 }}>Reset your password</div>
-                <div style={{ fontSize: 13, color: DS.colors.muted }}>Enter your email and we'll send you a reset link.</div>
-              </div>
-              <Input label="Email" value={email} onChange={setEmail} type="email" placeholder="you@clinic.com" onEnter={doReset} />
-              <Btn onClick={doReset} loading={loading} style={{ width: "100%", justifyContent: "center" }}>Send Reset Link</Btn>
-              <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: DS.colors.muted, cursor: "pointer", fontSize: 13, fontFamily: DS.fonts.body }}>← Back to Sign In</button>
-            </div>
-          )}
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// SIDEBAR
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// LAYOUT
+// ─────────────────────────────────────────────────────────
 function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor }) {
   const { isMobile, isTablet } = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -574,23 +401,29 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
     <div style={{ width: isCollapsed ? 260 : 232, background: DS.colors.white, borderRight: `1px solid ${DS.colors.border}`, display: "flex", flexDirection: "column", height: "100vh", overflowY: "auto" }}>
       <div style={{ padding: "20px 18px 14px", borderBottom: `1px solid ${DS.colors.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: DS.radius.md, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, flexShrink: 0 }}>RF</div>
+          <div style={{ width: 34, height: 34, borderRadius: DS.radius.md, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, letterSpacing: "0.05em", flexShrink: 0 }}>RF</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>RegenFlow</div>
-            {clinic && <div style={{ fontSize: 10.5, color: DS.colors.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{clinic.clinic_name}</div>}
+            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink, letterSpacing: "-0.2px" }}>RegenFlow</div>
+            {clinic && <div style={{ fontSize: 10.5, color: DS.colors.muted, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{clinic.clinic_name}</div>}
           </div>
-          {isCollapsed && <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.muted, padding: 4 }}>✕</button>}
+          {isCollapsed && (
+            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.muted, padding: 4, display: "flex" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          )}
         </div>
       </div>
-      <nav style={{ flex: 1, padding: "10px" }}>
+      <nav style={{ flex: 1, padding: "10px 10px", overflowY: "auto" }}>
         {items.map(item => (
           <button key={item.key} onClick={() => handleSelect(item.key)}
-            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "9px 11px", borderRadius: DS.radius.md, border: "none", background: active === item.key ? primaryColor + "14" : "transparent", color: active === item.key ? primaryColor : DS.colors.muted, fontWeight: active === item.key ? 600 : 400, fontSize: 13, cursor: "pointer", marginBottom: 1, textAlign: "left", transition: "all 0.12s", fontFamily: DS.fonts.body }}>
+            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: isCollapsed ? "12px 14px" : "9px 11px", borderRadius: DS.radius.md, border: "none", background: active === item.key ? primaryColor + "14" : "transparent", color: active === item.key ? primaryColor : DS.colors.muted, fontWeight: active === item.key ? 600 : 400, fontSize: isCollapsed ? 14 : 13, cursor: "pointer", marginBottom: isCollapsed ? 3 : 1, textAlign: "left", transition: "all 0.12s", fontFamily: DS.fonts.body }}>
+            <span style={{ flexShrink: 0 }}>{item.icon}</span>
             {item.label}
+            {item.badge && <span style={{ marginLeft: "auto", background: DS.colors.danger, color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: DS.radius.full }}>{item.badge}</span>}
           </button>
         ))}
       </nav>
-      <div style={{ padding: 14, borderTop: `1px solid ${DS.colors.border}` }}>
+      <div style={{ padding: "14px", borderTop: `1px solid ${DS.colors.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
           <Avatar name={user?.name} size={32} color={primaryColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -598,7 +431,9 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
             <div style={{ fontSize: 10.5, color: DS.colors.muted }}>{user?.title || user?.role?.replace("_", " ")}</div>
           </div>
         </div>
-        <button onClick={onLogout} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", padding: 9, borderRadius: DS.radius.md, border: "none", background: "#FFF5F5", color: DS.colors.danger, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign Out</button>
+        <button onClick={onLogout} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", padding: "9px", borderRadius: DS.radius.md, border: "none", background: "#FFF5F5", color: DS.colors.danger, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>
+          {I.logout} Sign Out
+        </button>
       </div>
     </div>
   );
@@ -606,1293 +441,2726 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
   if (isCollapsed) {
     return (
       <>
+        {/* Mobile top bar */}
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 56, background: DS.colors.white, borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 12, zIndex: 200 }}>
-          <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.ink, padding: 6 }}>☰</button>
-          <div style={{ width: 28, height: 28, borderRadius: DS.radius.sm, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>RegenFlow</span>
+          <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.ink, padding: 6, display: "flex", borderRadius: DS.radius.sm }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: DS.radius.sm, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
+            <span style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>RegenFlow</span>
+          </div>
+          {clinic && <span style={{ fontSize: 12, color: DS.colors.muted, marginLeft: 4 }}>· {clinic.clinic_name}</span>}
+          <div style={{ marginLeft: "auto" }}>
+            <Avatar name={user?.name} size={30} color={primaryColor} />
+          </div>
         </div>
+        {/* Overlay */}
         {open && (
           <div style={{ position: "fixed", inset: 0, zIndex: 300 }}>
             <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)" }} onClick={() => setOpen(false)} />
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, animation: "slideInLeft 0.25s ease", zIndex: 301 }}><SidebarInner /></div>
+            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, animation: "slideInLeft 0.25s ease", zIndex: 301 }}>
+              <SidebarInner />
+            </div>
           </div>
         )}
       </>
     );
   }
 
-  return <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100 }}><SidebarInner /></div>;
+  return (
+    <div style={{ position: "fixed", left: 0, top: 0, bottom: 0, zIndex: 100 }}>
+      <SidebarInner />
+    </div>
+  );
 }
 
-// ─────────────────────────────────────────────────────────────
-// PATIENT PORTAL
-// ─────────────────────────────────────────────────────────────
-function PatientPortal() {
-  const { currentUser, clinic, primaryColor, logout, doUpdateTask, doAddAppointment, setPage } = useApp();
+function PageHead({ title, subtitle, actions, eyebrow }) {
   const { isMobile } = useIsMobile();
-  const [tab, setTab] = useState("dashboard");
-  const [tasks, setTasks] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [instructions, setInstructions] = useState([]);
-  const [consentStatus, setConsentStatus] = useState([]);
-  const [uploadRequests, setUploadRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchAll = useCallback(async () => {
-    if (!currentUser) return;
-    setLoading(true);
-    const [t, a, instr, cs, ur] = await Promise.all([
-      getPatientTasks(currentUser.id),
-      getPatientAppointments(currentUser.id),
-      getClinicInstructions(currentUser.clinic_id, currentUser.treatment),
-      getPatientConsentStatus(currentUser.id),
-      getPatientUploadRequests(currentUser.id),
-    ]);
-    setTasks(t);
-    setAppointments(a);
-    setInstructions(instr);
-    setConsentStatus(cs);
-    setUploadRequests(ur);
-    setLoading(false);
-  }, [currentUser]);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  const handleUpdateTask = async (taskId, status) => {
-    await doUpdateTask(taskId, status);
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status, completed_at: status === "completed" ? new Date().toISOString() : t.completed_at } : t));
-  };
-
-  const handleAddAppointment = async (data) => {
-    const appt = await doAddAppointment(currentUser.id, data);
-    if (appt) setAppointments(prev => [...prev, appt]);
-  };
-
-  const navItems = [
-    { key: "dashboard", label: "Dashboard" },
-    { key: "tasks", label: "My Tasks" },
-    { key: "appointments", label: "Appointments" },
-    { key: "consent", label: "Consent Forms" },
-    { key: "instructions", label: "Instructions" },
-    { key: "uploads", label: "My Uploads" },
-    { key: "profile", label: "My Profile" },
-  ];
-
-  const completed = tasks.filter(t => t.status === "completed").length;
-  const pct = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
-
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface }}>
-      <Sidebar items={navItems} active={tab} onSelect={setTab} user={currentUser} clinic={clinic} onLogout={logout} primaryColor={primaryColor} />
-      <main style={{ flex: 1, marginLeft: isMobile ? 0 : 232, marginTop: isMobile ? 56 : 0, overflowY: "auto" }}>
-        {loading ? <Spinner /> : (
-          <>
-            {tab === "dashboard" && (
-              <div>
-                <PageHead title={`Welcome back, ${currentUser.name?.split(" ")[0]}`} subtitle={clinic?.tagline || ""} />
-                <div style={{ padding: "24px 32px" }}>
-                  {/* Progress card */}
-                  <Card style={{ marginBottom: 24, background: DS.colors.primary }}>
-                    <div style={{ color: "#fff" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, opacity: 0.7, marginBottom: 4 }}>CARE JOURNEY PROGRESS</div>
-                      <div style={{ fontSize: 28, fontWeight: 800, marginBottom: 8 }}>{pct}% Complete</div>
-                      <div style={{ background: "rgba(255,255,255,0.2)", borderRadius: 99, height: 6, marginBottom: 12 }}>
-                        <div style={{ background: DS.colors.accent, height: 6, borderRadius: 99, width: `${pct}%`, transition: "width 0.5s ease" }} />
-                      </div>
-                      <div style={{ fontSize: 13, opacity: 0.8 }}>{completed} of {tasks.length} tasks completed</div>
-                    </div>
-                  </Card>
-                  {/* Pending tasks */}
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 14 }}>Pending Tasks</div>
-                  {tasks.filter(t => t.status !== "completed").length === 0 ? (
-                    <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>All tasks complete! 🎉</div></Card>
-                  ) : (
-                    tasks.filter(t => t.status !== "completed").map(task => (
-                      <Card key={task.id} style={{ marginBottom: 10, padding: "16px 20px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor(task.status), flexShrink: 0 }} />
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600, fontSize: 14 }}>{task.title}</div>
-                            <div style={{ fontSize: 12, color: DS.colors.muted }}>Due {task.due_date} · {task.task_type}</div>
-                          </div>
-                          <Chip color={statusColor(task.status)} dot>{statusLabel(task.status)}</Chip>
-                          <Btn size="sm" variant="secondary" onClick={() => handleUpdateTask(task.id, task.status === "not_started" ? "in_progress" : "completed")}>
-                            {task.status === "not_started" ? "Start" : "Complete"}
-                          </Btn>
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-
-            {tab === "tasks" && (
-              <div>
-                <PageHead title="My Tasks" subtitle="Complete all tasks to prepare for your treatment" />
-                <div style={{ padding: "24px 32px" }}>
-                  {tasks.map(task => (
-                    <Card key={task.id} style={{ marginBottom: 10, padding: "16px 20px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor(task.status), flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{task.title}</div>
-                          <div style={{ fontSize: 12, color: DS.colors.muted }}>Due {task.due_date} · {task.task_type}</div>
-                        </div>
-                        <Chip color={statusColor(task.status)} dot>{statusLabel(task.status)}</Chip>
-                        {task.status !== "completed" && (
-                          <Btn size="sm" variant="secondary" onClick={() => handleUpdateTask(task.id, task.status === "not_started" ? "in_progress" : "completed")}>
-                            {task.status === "not_started" ? "Start" : "Mark Complete"}
-                          </Btn>
-                        )}
-                      </div>
-                    </Card>
-                  ))}
-                  {tasks.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No tasks assigned yet.</div></Card>}
-                </div>
-              </div>
-            )}
-
-            {tab === "appointments" && (
-              <PatientAppointments appointments={appointments} onAdd={handleAddAppointment} clinicId={currentUser.clinic_id} />
-            )}
-
-            {tab === "consent" && (
-              <PatientConsents patientId={currentUser.id} clinicId={currentUser.clinic_id} consentStatus={consentStatus} onRefresh={fetchAll} />
-            )}
-
-            {tab === "instructions" && (
-              <div>
-                <PageHead title="Treatment Instructions" subtitle="Follow these guidelines before and after your treatment" />
-                <div style={{ padding: "24px 32px" }}>
-                  {instructions.map(instr => (
-                    <Card key={instr.id} style={{ marginBottom: 16 }}>
-                      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{instr.title}</div>
-                      <Chip color={instr.instruction_type === "pre_visit" ? DS.colors.blue : DS.colors.success} size="sm" style={{ marginBottom: 14 }}>{instr.instruction_type === "pre_visit" ? "Pre-Treatment" : "Post-Treatment"}</Chip>
-                      <ul style={{ margin: 0, paddingLeft: 20 }}>
-                        {instr.content.map((c, i) => (
-                          <li key={i} style={{ fontSize: 14, color: DS.colors.ink, marginBottom: 6, lineHeight: 1.6 }}>{c}</li>
-                        ))}
-                      </ul>
-                    </Card>
-                  ))}
-                  {instructions.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No instructions available yet.</div></Card>}
-                </div>
-              </div>
-            )}
-
-            {tab === "uploads" && (
-              <div>
-                <PageHead title="My Uploads" subtitle="Upload documents requested by your care team" />
-                <div style={{ padding: "24px 32px" }}>
-                  {uploadRequests.map(ur => (
-                    <Card key={ur.id} style={{ marginBottom: 12, padding: "16px 20px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{ur.label}</div>
-                          {ur.message && <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 2 }}>{ur.message}</div>}
-                          {ur.due_date && <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 2 }}>Due {ur.due_date}</div>}
-                        </div>
-                        <Chip color={ur.status === "fulfilled" ? DS.colors.success : ur.status === "reviewed" ? DS.colors.purple : DS.colors.warning} dot>{ur.status}</Chip>
-                      </div>
-                    </Card>
-                  ))}
-                  {uploadRequests.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No upload requests yet.</div></Card>}
-                </div>
-              </div>
-            )}
-
-            {tab === "profile" && (
-              <PatientProfileTab profile={currentUser} />
-            )}
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
-
-function PatientAppointments({ appointments, onAdd, clinicId }) {
-  const [showModal, setShowModal] = useState(false);
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [reason, setReason] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    if (!date || !time) return;
-    setLoading(true);
-    await onAdd({ requestedDate: date, requestedTime: time, reason });
-    setShowModal(false);
-    setDate(""); setTime(""); setReason("");
-    setLoading(false);
-  };
-
-  return (
-    <div>
-      <PageHead title="Appointments" subtitle="Request and track your appointments"
-        actions={<Btn size="sm" onClick={() => setShowModal(true)}>Request Appointment</Btn>} />
-      <div style={{ padding: "24px 32px" }}>
-        {appointments.map(a => (
-          <Card key={a.id} style={{ marginBottom: 12, padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{a.requested_date} at {a.requested_time}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.reason || "General appointment"}</div>
-              </div>
-              <Chip color={a.status === "confirmed" ? DS.colors.success : a.status === "cancelled" ? DS.colors.danger : DS.colors.warning} dot>{a.status}</Chip>
-            </div>
-          </Card>
-        ))}
-        {appointments.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No appointments yet.</div></Card>}
+    <div style={{ padding: isMobile ? "16px 16px 14px" : "28px 36px 22px", borderBottom: `1px solid ${DS.colors.border}`, background: DS.colors.white, display: "flex", alignItems: isMobile ? "flex-start" : "center", justifyContent: "space-between", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 12 : 0 }}>
+      <div>
+        {eyebrow && <div style={{ fontSize: 11, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{eyebrow}</div>}
+        <h1 style={{ margin: 0, fontSize: isMobile ? 18 : 22, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.4px", fontFamily: DS.fonts.body }}>{title}</h1>
+        {subtitle && <p style={{ margin: "3px 0 0", fontSize: 13, color: DS.colors.muted }}>{subtitle}</p>}
       </div>
-      <Modal open={showModal} onClose={() => setShowModal(false)} title="Request Appointment">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Preferred Date" value={date} onChange={setDate} type="date" required />
-          <Input label="Preferred Time" value={time} onChange={setTime} placeholder="e.g. 10:00 AM" required />
-          <Textarea label="Reason for Visit" value={reason} onChange={setReason} placeholder="Describe your reason..." rows={3} />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setShowModal(false)}>Cancel</Btn>
-            <Btn onClick={submit} loading={loading}>Request</Btn>
-          </div>
-        </div>
-      </Modal>
+      {actions && <div style={{ display: "flex", gap: 8, alignItems: "center" }}>{actions}</div>}
     </div>
   );
 }
 
-function PatientConsents({ patientId, clinicId, consentStatus, onRefresh }) {
-  const { showToast } = useApp();
-  const [forms, setForms] = useState([]);
-  const [signing, setSigning] = useState(null);
-  const [sigName, setSigName] = useState("");
-  const [loading, setLoading] = useState(true);
+function StatCard({ label, value, icon, color = DS.colors.primary, delta, sub }) {
+  return (
+    <Card style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ width: 38, height: 38, borderRadius: DS.radius.md, background: color + "14", display: "flex", alignItems: "center", justifyContent: "center", color }}>{icon}</div>
+        {delta && <span style={{ fontSize: 11, fontWeight: 600, color: delta > 0 ? DS.colors.success : DS.colors.danger }}>{delta > 0 ? "↑" : "↓"} {Math.abs(delta)}%</span>}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: DS.colors.ink, letterSpacing: "-1px", lineHeight: 1, fontFamily: DS.fonts.body }}>{value}</div>
+      <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 4, fontWeight: 500 }}>{label}</div>
+      {sub && <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 2 }}>{sub}</div>}
+    </Card>
+  );
+}
 
+function TaskRow({ task, onUpdate, canUpdate }) {
+  const color = statusColor(task.status);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+      <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 500, color: DS.colors.ink }}>{task.title}</div>
+        <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 1 }}>Due {task.due} · {task.type}</div>
+      </div>
+      <Chip color={color} dot>{statusLabel(task.status)}</Chip>
+      {canUpdate && task.status !== "completed" && (
+        <Btn size="sm" variant="secondary" onClick={() => onUpdate(task.id, task.status === "not_started" ? "in_progress" : "completed")}>
+          {task.status === "not_started" ? "Start" : "Complete"}
+        </Btn>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// MODAL
+// ─────────────────────────────────────────────────────────
+function Modal({ open, onClose, title, subtitle, children, width = 480 }) {
   useEffect(() => {
-    getClinicConsentForms(clinicId).then(f => { setForms(f); setLoading(false); });
-  }, [clinicId]);
-
-  const doSign = async () => {
-    if (!sigName.trim()) return;
-    try {
-      await signConsent({ consentFormId: signing.id, patientId, clinicId, signatureData: sigName });
-      showToast("Consent signed");
-      setSigning(null);
-      setSigName("");
-      onRefresh();
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const isSigned = (formId) => consentStatus.some(cs => cs.consent_form_id === formId && cs.signed_at);
-
-  if (loading) return <Spinner />;
-
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+  if (!open) return null;
   return (
-    <div>
-      <PageHead title="Consent Forms" subtitle="Review and sign your treatment consent documents" />
-      <div style={{ padding: "24px 32px" }}>
-        {forms.map(form => {
-          const signed = isSigned(form.id);
-          return (
-            <Card key={form.id} style={{ marginBottom: 16 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: signed ? 0 : 16 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{form.title}</div>
-                </div>
-                {signed ? (
-                  <Chip color={DS.colors.success} dot>Signed</Chip>
-                ) : (
-                  <Btn size="sm" onClick={() => setSigning(form)}>Review & Sign</Btn>
-                )}
-              </div>
-            </Card>
-          );
-        })}
-        {forms.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No consent forms required yet.</div></Card>}
-      </div>
-      <Modal open={!!signing} onClose={() => setSigning(null)} title={signing?.title} width={540}>
-        {signing && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: 16, maxHeight: 300, overflowY: "auto" }}>
-              <pre style={{ fontFamily: DS.fonts.body, fontSize: 12.5, lineHeight: 1.7, color: DS.colors.ink, whiteSpace: "pre-wrap", margin: 0 }}>{signing.content}</pre>
-            </div>
-            <Input label="Type your full name to sign" value={sigName} onChange={setSigName} placeholder="Jordan Rivera" />
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              <Btn variant="secondary" onClick={() => setSigning(null)}>Cancel</Btn>
-              <Btn onClick={doSign} disabled={!sigName.trim()}>Sign & Submit</Btn>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </div>
-  );
-}
-
-function PatientProfileTab({ profile }) {
-  const { showToast } = useApp();
-  const [name, setName] = useState(profile.name || "");
-  const [phone, setPhone] = useState(profile.phone || "");
-  const [loading, setLoading] = useState(false);
-  const [pwModal, setPwModal] = useState(false);
-  const [oldPw, setOldPw] = useState("");
-  const [newPw, setNewPw] = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
-
-  const saveProfile = async () => {
-    setLoading(true);
-    try {
-      await updateProfile(profile.id, { name, phone });
-      showToast("Profile updated");
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-    setLoading(false);
-  };
-
-  const changePassword = async () => {
-    if (newPw !== confirmPw) { showToast("Passwords do not match", "error"); return; }
-    if (newPw.length < 8) { showToast("Password must be at least 8 characters", "error"); return; }
-    const { error } = await supabase.auth.updateUser({ password: newPw });
-    if (error) showToast(error.message, "error");
-    else { showToast("Password updated"); setPwModal(false); setOldPw(""); setNewPw(""); setConfirmPw(""); }
-  };
-
-  return (
-    <div>
-      <PageHead title="My Profile" subtitle="Manage your personal information" />
-      <div style={{ padding: "24px 32px", maxWidth: 500 }}>
-        <Card>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <Input label="Full Name" value={name} onChange={setName} />
-            <Input label="Phone" value={phone} onChange={setPhone} type="tel" />
-            <div style={{ padding: "12px 14px", background: DS.colors.surface, borderRadius: DS.radius.md }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 2 }}>Email</div>
-              <div style={{ fontSize: 14, color: DS.colors.muted }}>{profile.email || "–"}</div>
-            </div>
-            <div style={{ display: "flex", gap: 10 }}>
-              <Btn onClick={saveProfile} loading={loading}>Save Changes</Btn>
-              <Btn variant="secondary" onClick={() => setPwModal(true)}>Change Password</Btn>
-            </div>
-          </div>
-        </Card>
-      </div>
-      <Modal open={pwModal} onClose={() => setPwModal(false)} title="Change Password">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="New Password" value={newPw} onChange={setNewPw} type="password" placeholder="Min 8 characters" />
-          <Input label="Confirm New Password" value={confirmPw} onChange={setConfirmPw} type="password" placeholder="Repeat new password" />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setPwModal(false)}>Cancel</Btn>
-            <Btn onClick={changePassword}>Update Password</Btn>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// ADMIN PORTAL  (clinic_admin + clinic_staff)
-// ─────────────────────────────────────────────────────────────
-function AdminPortal() {
-  const { currentUser, clinic, primaryColor, logout, doUpdateTask, doAddNote, doSendReminder, doCreateUploadRequest, selectedPatientId, setSelectedPatientId, showToast } = useApp();
-  const { isMobile } = useIsMobile();
-  const [tab, setTab] = useState("dashboard");
-
-  // Clinic-level data
-  const [patients, setPatients] = useState([]);
-  const [staff, setStaff] = useState([]);
-  const [allTasks, setAllTasks] = useState([]);
-  const [allAppointments, setAllAppointments] = useState([]);
-  const [allNotes, setAllNotes] = useState({});
-  const [reminderLog, setReminderLog] = useState([]);
-  const [uploadRequests, setUploadRequests] = useState([]);
-  const [insights, setInsights] = useState([]);
-  const [intakeForms, setIntakeForms] = useState([]);
-  const [consentForms, setConsentForms] = useState([]);
-  const [followups, setFollowups] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const clinicId = currentUser?.clinic_id;
-
-  const fetchAll = useCallback(async () => {
-    if (!clinicId) return;
-    setLoading(true);
-    const [p, s, t, a, rem, ur, ins, forms, cforms, fu] = await Promise.all([
-      getClinicPatients(clinicId),
-      getClinicStaff(clinicId),
-      getClinicTasks(clinicId),
-      getClinicAppointments(clinicId),
-      getClinicReminders(clinicId),
-      getClinicUploadRequests(clinicId),
-      getClinicInsights(clinicId),
-      getClinicIntakeForms(clinicId),
-      getClinicConsentForms(clinicId),
-      getClinicFollowups(clinicId),
-    ]);
-    setPatients(p);
-    setStaff(s);
-    setAllTasks(t);
-    setAllAppointments(a);
-    setReminderLog(rem);
-    setUploadRequests(ur);
-    setInsights(ins);
-    setIntakeForms(forms);
-    setConsentForms(cforms);
-    setFollowups(fu);
-    setLoading(false);
-  }, [clinicId]);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  const getPatientTasks = (pid) => allTasks.filter(t => t.patient_id === pid);
-  const getPatientAppointments = (pid) => allAppointments.filter(a => a.patient_id === pid);
-
-  const handleUpdateTask = async (taskId, status) => {
-    await doUpdateTask(taskId, status);
-    setAllTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
-  };
-
-  const handleAddNote = async (patientId, content) => {
-    const note = await doAddNote(patientId, content);
-    if (note) {
-      setAllNotes(prev => ({ ...prev, [patientId]: [note, ...(prev[patientId] || [])] }));
-    }
-  };
-
-  const handleSendReminder = async (patientId, data) => {
-    const rem = await doSendReminder(patientId, data);
-    if (rem) setReminderLog(prev => [rem, ...prev]);
-  };
-
-  const handleCreateUpload = async (patientId, data) => {
-    const req = await doCreateUploadRequest(patientId, data);
-    if (req) {
-      setUploadRequests(prev => [req, ...prev]);
-      setAllTasks(prev => [...prev, { patient_id: patientId, clinic_id: clinicId, title: data.label, task_type: "upload", status: "not_started", due_date: data.dueDate }]);
-    }
-  };
-
-  const handleMarkReviewed = async (uploadId) => {
-    try {
-      await markUploadReviewed(uploadId, currentUser.id);
-      setUploadRequests(prev => prev.map(u => u.id === uploadId ? { ...u, status: "reviewed" } : u));
-      showToast("Marked as reviewed");
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const handleAppointmentStatus = async (apptId, status) => {
-    try {
-      const updated = await updateAppointmentStatus(apptId, status);
-      setAllAppointments(prev => prev.map(a => a.id === apptId ? updated : a));
-      showToast(`Appointment ${status}`);
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const handleDismissInsight = async (id) => {
-    await dismissInsight(id);
-    setInsights(prev => prev.filter(i => i.id !== id));
-  };
-
-  const navItems = [
-    { key: "dashboard", label: "Dashboard" },
-    { key: "patients", label: "Patients" },
-    { key: "forms", label: "Intake Forms" },
-    { key: "consents", label: "Consent Forms" },
-    { key: "appointments", label: "Appointments" },
-    { key: "reminders", label: "Reminders" },
-    { key: "uploads", label: "Uploads" },
-    { key: "followup", label: "Follow-Up" },
-    { key: "staff", label: "Staff" },
-    { key: "ai", label: "AI Assistant" },
-  ].filter(item => currentUser?.role === "clinic_admin" || !["staff"].includes(item.key));
-
-  const selectedPatient = patients.find(p => p.id === selectedPatientId);
-
-  return (
-    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface }}>
-      <Sidebar items={navItems} active={tab} onSelect={k => { setTab(k); if (k !== "patients") setSelectedPatientId(null); }} user={currentUser} clinic={clinic} onLogout={logout} primaryColor={primaryColor} />
-      <main style={{ flex: 1, marginLeft: isMobile ? 0 : 232, marginTop: isMobile ? 56 : 0, overflowY: "auto" }}>
-        {loading ? <Spinner /> : selectedPatient ? (
-          <PatientDetail
-            patient={selectedPatient}
-            tasks={getPatientTasks(selectedPatient.id)}
-            appointments={getPatientAppointments(selectedPatient.id)}
-            notes={allNotes[selectedPatient.id]}
-            onClose={() => setSelectedPatientId(null)}
-            onUpdateTask={handleUpdateTask}
-            onAddNote={handleAddNote}
-            clinicId={clinicId}
-          />
-        ) : (
-          <>
-            {tab === "dashboard" && (
-              <AdminDashboard
-                patients={patients}
-                tasks={allTasks}
-                appointments={allAppointments}
-                insights={insights}
-                onDismissInsight={handleDismissInsight}
-                onSelectPatient={pid => { setSelectedPatientId(pid); setTab("patients"); }}
-                onNavigate={setTab}
-              />
-            )}
-            {tab === "patients" && (
-              <AdminPatients patients={patients} tasks={allTasks} onSelect={pid => setSelectedPatientId(pid)} clinicId={clinicId} onRefresh={fetchAll} />
-            )}
-            {tab === "forms" && <AdminForms forms={intakeForms} clinicId={clinicId} onRefresh={fetchAll} />}
-            {tab === "consents" && <AdminConsents forms={consentForms} />}
-            {tab === "appointments" && <AdminAppointments appointments={allAppointments} onStatusChange={handleAppointmentStatus} />}
-            {tab === "reminders" && <AdminReminders log={reminderLog} patients={patients} onSend={handleSendReminder} />}
-            {tab === "uploads" && <AdminUploads requests={uploadRequests} onMarkReviewed={handleMarkReviewed} onCreateRequest={handleCreateUpload} patients={patients} />}
-            {tab === "followup" && <AdminFollowUp followups={followups} patients={patients} />}
-            {tab === "staff" && <AdminStaff staff={staff} clinic={clinic} onRefresh={fetchAll} />}
-            {tab === "ai" && <AdminAI />}
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
-
-function AdminDashboard({ patients, tasks, appointments, insights, onDismissInsight, onSelectPatient, onNavigate }) {
-  const pending = tasks.filter(t => t.status !== "completed").length;
-  const pendingAppts = appointments.filter(a => a.status === "pending").length;
-
-  return (
-    <div>
-      <PageHead title="Dashboard" subtitle="Clinic overview" />
-      <div style={{ padding: "24px 36px" }}>
-        {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-          {[
-            ["Patients", patients.length, DS.colors.primary],
-            ["Pending Tasks", pending, DS.colors.warning],
-            ["Pending Appts", pendingAppts, DS.colors.blue],
-            ["AI Insights", insights.length, DS.colors.purple],
-          ].map(([l, v, c]) => (
-            <Card key={l}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: DS.colors.ink }}>{v}</div>
-              <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 4 }}>{l}</div>
-            </Card>
-          ))}
-        </div>
-
-        {/* AI Insights */}
-        {insights.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>AI Insights</div>
-            {insights.map(insight => (
-              <Card key={insight.id} style={{ marginBottom: 10, padding: "14px 18px" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <Chip color={insight.severity === "high" ? DS.colors.danger : insight.severity === "medium" ? DS.colors.warning : DS.colors.success}>{insight.severity}</Chip>
-                    <div style={{ fontSize: 13.5, color: DS.colors.ink, marginTop: 6, lineHeight: 1.5 }}>{insight.message}</div>
-                  </div>
-                  <Btn size="sm" variant="ghost" onClick={() => onDismissInsight(insight.id)}>Dismiss</Btn>
-                </div>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Recent patients */}
-        <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 12 }}>Recent Patients</div>
-        {patients.slice(0, 5).map(p => {
-          const pt = tasks.filter(t => t.patient_id === p.id);
-          const done = pt.filter(t => t.status === "completed").length;
-          return (
-            <Card key={p.id} style={{ marginBottom: 10, padding: "14px 18px", cursor: "pointer" }} onClick={() => onSelectPatient(p.id)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <Avatar name={p.name} size={36} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: DS.colors.muted }}>{p.treatment || "No treatment set"}</div>
-                </div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{done}/{pt.length} tasks</div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function AdminPatients({ patients, tasks, onSelect, clinicId, onRefresh }) {
-  const { showToast } = useApp();
-  const [search, setSearch] = useState("");
-  const [inviteModal, setInviteModal] = useState(false);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteLoading, setInviteLoading] = useState(false);
-
-  const filtered = patients.filter(p =>
-    p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.email?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const doInvite = async () => {
-    if (!inviteName || !inviteEmail) return;
-    setInviteLoading(true);
-    try {
-      await signUp({ email: inviteEmail, password: Math.random().toString(36).slice(2) + "Aa1!", name: inviteName, clinicId, role: "patient" });
-      showToast(`Invited ${inviteName}`);
-      setInviteModal(false);
-      setInviteName(""); setInviteEmail("");
-      onRefresh();
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-    setInviteLoading(false);
-  };
-
-  return (
-    <div>
-      <PageHead title="Patients" subtitle={`${patients.length} patients`}
-        actions={<Btn size="sm" onClick={() => setInviteModal(true)}>Invite Patient</Btn>} />
-      <div style={{ padding: "24px 36px" }}>
-        <Input value={search} onChange={setSearch} placeholder="Search patients..." style={{ marginBottom: 20 }} />
-        <Card style={{ padding: 0 }}>
-          {filtered.map((p, idx) => {
-            const pt = tasks.filter(t => t.patient_id === p.id);
-            const done = pt.filter(t => t.status === "completed").length;
-            const pct = pt.length ? Math.round((done / pt.length) * 100) : 0;
-            return (
-              <div key={p.id} className="patient-row" onClick={() => onSelect(p.id)}
-                style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: idx < filtered.length - 1 ? `1px solid ${DS.colors.border}` : "none", cursor: "pointer" }}>
-                <Avatar name={p.name} size={36} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: DS.colors.muted }}>{p.email}</div>
-                </div>
-                <div style={{ fontSize: 12, color: DS.colors.muted, textAlign: "right" }}>
-                  <div>{p.treatment || "—"}</div>
-                  <div>{pct}% complete</div>
-                </div>
-              </div>
-            );
-          })}
-          {filtered.length === 0 && <div style={{ padding: 32, textAlign: "center", color: DS.colors.muted }}>No patients found</div>}
-        </Card>
-      </div>
-      <Modal open={inviteModal} onClose={() => setInviteModal(false)} title="Invite Patient">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Full Name" value={inviteName} onChange={setInviteName} required />
-          <Input label="Email" value={inviteEmail} onChange={setInviteEmail} type="email" required />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setInviteModal(false)}>Cancel</Btn>
-            <Btn onClick={doInvite} loading={inviteLoading}>Send Invite</Btn>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-function PatientDetail({ patient, tasks, appointments, notes: initialNotes, onClose, onUpdateTask, onAddNote, clinicId }) {
-  const [notes, setNotes] = useState(initialNotes);
-  const [noteText, setNoteText] = useState("");
-  const [loadingNotes, setLoadingNotes] = useState(!initialNotes);
-
-  useEffect(() => {
-    if (!initialNotes) {
-      getPatientNotes(patient.id).then(n => { setNotes(n); setLoadingNotes(false); });
-    }
-  }, [patient.id, initialNotes]);
-
-  const submitNote = async () => {
-    if (!noteText.trim()) return;
-    const note = await onAddNote(patient.id, noteText);
-    if (note) setNotes(prev => [note, ...(prev || [])]);
-    setNoteText("");
-  };
-
-  return (
-    <div>
-      <div style={{ padding: "20px 36px 14px", borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", gap: 14 }}>
-        <Btn variant="secondary" size="sm" onClick={onClose}>← Back</Btn>
-        <Avatar name={patient.name} size={40} />
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 18 }}>{patient.name}</div>
-          <div style={{ fontSize: 13, color: DS.colors.muted }}>{patient.email} · {patient.treatment || "No treatment"}</div>
-        </div>
-      </div>
-      <div style={{ padding: "24px 36px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-        {/* Tasks */}
-        <Card>
-          <div style={{ fontWeight: 700, marginBottom: 14 }}>Tasks</div>
-          {tasks.map(task => (
-            <div key={task.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: statusColor(task.status) }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{task.title}</div>
-                <div style={{ fontSize: 11, color: DS.colors.muted }}>Due {task.due_date}</div>
-              </div>
-              <Chip color={statusColor(task.status)} dot>{statusLabel(task.status)}</Chip>
-              {task.status !== "completed" && (
-                <Btn size="sm" variant="secondary" onClick={() => onUpdateTask(task.id, task.status === "not_started" ? "in_progress" : "completed")}>
-                  {task.status === "not_started" ? "Start" : "Complete"}
-                </Btn>
-              )}
-            </div>
-          ))}
-          {tasks.length === 0 && <div style={{ color: DS.colors.muted, fontSize: 13 }}>No tasks assigned</div>}
-        </Card>
-
-        {/* Notes */}
-        <Card>
-          <div style={{ fontWeight: 700, marginBottom: 14 }}>Staff Notes</div>
-          <Textarea value={noteText} onChange={setNoteText} placeholder="Add a note..." rows={3} style={{ marginBottom: 8 }} />
-          <Btn size="sm" onClick={submitNote} style={{ marginBottom: 14 }}>Save Note</Btn>
-          {loadingNotes ? <Spinner size={16} /> : (notes || []).map(note => (
-            <div key={note.id} style={{ padding: "10px 0", borderTop: `1px solid ${DS.colors.border}` }}>
-              <div style={{ fontSize: 12, color: DS.colors.muted, marginBottom: 3 }}>
-                {note.staff?.name || "Staff"} · {new Date(note.created_at).toLocaleDateString()}
-              </div>
-              <div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{note.content}</div>
-            </div>
-          ))}
-        </Card>
-
-        {/* Appointments */}
-        <Card style={{ gridColumn: "1 / -1" }}>
-          <div style={{ fontWeight: 700, marginBottom: 14 }}>Appointments</div>
-          {appointments.map(a => (
-            <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500 }}>{a.requested_date} at {a.requested_time}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.reason}</div>
-              </div>
-              <Chip color={a.status === "confirmed" ? DS.colors.success : DS.colors.warning} dot>{a.status}</Chip>
-            </div>
-          ))}
-          {appointments.length === 0 && <div style={{ color: DS.colors.muted, fontSize: 13 }}>No appointments</div>}
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function AdminForms({ forms, clinicId, onRefresh }) {
-  const { showToast } = useApp();
-  const [modal, setModal] = useState(false);
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const doCreate = async () => {
-    if (!title) return;
-    setLoading(true);
-    try {
-      await createIntakeForm({ clinicId, title, description: desc });
-      showToast("Form created");
-      setModal(false); setTitle(""); setDesc("");
-      onRefresh();
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div>
-      <PageHead title="Intake Forms" subtitle={`${forms.length} templates`}
-        actions={<Btn size="sm" onClick={() => setModal(true)}>New Template</Btn>} />
-      <div style={{ padding: "24px 36px" }}>
-        {forms.map(f => (
-          <Card key={f.id} style={{ marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 15 }}>{f.title}</div>
-            <div style={{ fontSize: 13, color: DS.colors.muted, marginTop: 4 }}>{f.description}</div>
-            <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 8 }}>{f.fields?.length || 0} fields</div>
-          </Card>
-        ))}
-        {forms.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No intake forms yet.</div></Card>}
-      </div>
-      <Modal open={modal} onClose={() => setModal(false)} title="New Intake Form">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Title" value={title} onChange={setTitle} placeholder="New Patient Medical History" required />
-          <Textarea label="Description" value={desc} onChange={setDesc} placeholder="Instructions shown to patients..." rows={3} />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(false)}>Cancel</Btn>
-            <Btn onClick={doCreate} loading={loading}>Create</Btn>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-function AdminConsents({ forms }) {
-  return (
-    <div>
-      <PageHead title="Consent Forms" subtitle={`${forms.length} forms`} />
-      <div style={{ padding: "24px 36px" }}>
-        {forms.map(f => {
-          const signed = f.signatures?.filter(s => s.signed_at).length || 0;
-          return (
-            <Card key={f.id} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>{f.title}</div>
-                  <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 2 }}>{signed} signature{signed !== 1 ? "s" : ""}</div>
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-        {forms.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No consent forms yet.</div></Card>}
-      </div>
-    </div>
-  );
-}
-
-function AdminAppointments({ appointments, onStatusChange }) {
-  const pending = appointments.filter(a => a.status === "pending");
-  const others = appointments.filter(a => a.status !== "pending");
-
-  return (
-    <div>
-      <PageHead title="Appointments" subtitle={`${appointments.length} total`} />
-      <div style={{ padding: "24px 36px" }}>
-        {pending.length > 0 && (
-          <>
-            <div style={{ fontWeight: 700, marginBottom: 12 }}>Pending Confirmation</div>
-            {pending.map(a => (
-              <Card key={a.id} style={{ marginBottom: 10, padding: "14px 18px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{a.patient?.name || "Patient"}</div>
-                    <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.requested_date} at {a.requested_time}</div>
-                    <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.reason}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <Btn size="sm" onClick={() => onStatusChange(a.id, "confirmed")}>Confirm</Btn>
-                    <Btn size="sm" variant="danger" onClick={() => onStatusChange(a.id, "cancelled")}>Cancel</Btn>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </>
-        )}
-        {others.map(a => (
-          <Card key={a.id} style={{ marginBottom: 10, padding: "14px 18px", opacity: a.status === "cancelled" ? 0.6 : 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{a.patient?.name || "Patient"}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.requested_date} at {a.requested_time}</div>
-              </div>
-              <Chip color={a.status === "confirmed" ? DS.colors.success : a.status === "cancelled" ? DS.colors.danger : DS.colors.muted} dot>{a.status}</Chip>
-            </div>
-          </Card>
-        ))}
-        {appointments.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No appointments yet.</div></Card>}
-      </div>
-    </div>
-  );
-}
-
-function AdminReminders({ log, patients, onSend }) {
-  const [modal, setModal] = useState(false);
-  const [patId, setPatId] = useState("");
-  const [type, setType] = useState("intake");
-  const [channel, setChannel] = useState("Email");
-  const [msg, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const doSend = async () => {
-    if (!patId || !msg) return;
-    setLoading(true);
-    await onSend(patId, { reminderType: type, channel, message: msg });
-    setModal(false); setPatId(""); setMsg("");
-    setLoading(false);
-  };
-
-  return (
-    <div>
-      <PageHead title="Reminders" subtitle={`${log.length} sent`}
-        actions={<Btn size="sm" onClick={() => setModal(true)}>Send Reminder</Btn>} />
-      <div style={{ padding: "24px 36px" }}>
-        {log.map(r => (
-          <Card key={r.id} style={{ marginBottom: 10, padding: "13px 18px" }}>
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{r.patient?.name || "Patient"}</div>
-                <div style={{ fontSize: 12.5, color: DS.colors.ink, marginTop: 2 }}>{r.message}</div>
-                <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 4 }}>{r.channel} · {new Date(r.sent_at).toLocaleDateString()}</div>
-              </div>
-              <Chip color={DS.colors.success} dot>{r.status}</Chip>
-            </div>
-          </Card>
-        ))}
-        {log.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No reminders sent yet.</div></Card>}
-      </div>
-      <Modal open={modal} onClose={() => setModal(false)} title="Send Reminder">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ position: "absolute", inset: 0, background: "rgba(10,10,15,0.45)", backdropFilter: "blur(4px)" }} onClick={onClose} />
+      <div style={{ position: "relative", background: DS.colors.white, borderRadius: DS.radius.xl, boxShadow: DS.shadow.xl, width: "100%", maxWidth: width, maxHeight: "90vh", overflowY: "auto", animation: "fadeUp 0.25s ease" }}>
+        <div style={{ padding: "22px 24px 18px", borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>Patient</label>
-            <select value={patId} onChange={e => setPatId(e.target.value)} style={{ width: "100%", padding: "11px 14px", borderRadius: DS.radius.md, border: `1.5px solid ${DS.colors.border}`, fontSize: 14, fontFamily: DS.fonts.body }}>
-              <option value="">Select patient...</option>
-              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <div style={{ fontWeight: 700, fontSize: 16, color: DS.colors.ink, letterSpacing: "-0.3px" }}>{title}</div>
+            {subtitle && <div style={{ fontSize: 13, color: DS.colors.muted, marginTop: 3 }}>{subtitle}</div>}
           </div>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>Channel</label>
-            <div style={{ display: "flex", gap: 8 }}>
-              {["Email", "SMS", "Email + SMS"].map(ch => (
-                <button key={ch} onClick={() => setChannel(ch)} style={{ flex: 1, padding: "8px 4px", borderRadius: DS.radius.md, border: `1.5px solid ${channel === ch ? DS.colors.primary : DS.colors.border}`, background: channel === ch ? DS.colors.primaryLight : DS.colors.white, color: channel === ch ? DS.colors.primary : DS.colors.ink, fontSize: 12, fontWeight: channel === ch ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body }}>{ch}</button>
-              ))}
-            </div>
-          </div>
-          <Textarea label="Message" value={msg} onChange={setMsg} placeholder="Write your reminder message..." rows={3} required />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(false)}>Cancel</Btn>
-            <Btn onClick={doSend} loading={loading}>Send</Btn>
-          </div>
+          <button onClick={onClose} style={{ background: DS.colors.surface, border: `1px solid ${DS.colors.border}`, borderRadius: DS.radius.md, cursor: "pointer", padding: "5px 8px", color: DS.colors.muted, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
-      </Modal>
-    </div>
-  );
-}
-
-function AdminUploads({ requests, onMarkReviewed, onCreateRequest, patients }) {
-  const [modal, setModal] = useState(false);
-  const [patId, setPatId] = useState("");
-  const [label, setLabel] = useState("");
-  const [message, setMsg] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const doCreate = async () => {
-    if (!patId || !label) return;
-    setLoading(true);
-    await onCreateRequest(patId, { label, message });
-    setModal(false); setPatId(""); setLabel(""); setMsg("");
-    setLoading(false);
-  };
-
-  return (
-    <div>
-      <PageHead title="Upload Requests" subtitle={`${requests.length} requests`}
-        actions={<Btn size="sm" onClick={() => setModal(true)}>Request Upload</Btn>} />
-      <div style={{ padding: "24px 36px" }}>
-        {requests.map(r => (
-          <Card key={r.id} style={{ marginBottom: 10, padding: "14px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{r.patient?.name || "Patient"}</div>
-                <div style={{ fontSize: 13, color: DS.colors.ink }}>{r.label}</div>
-                <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 2 }}>{new Date(r.created_at).toLocaleDateString()}</div>
-              </div>
-              <Chip color={r.status === "reviewed" ? DS.colors.purple : r.status === "fulfilled" ? DS.colors.success : DS.colors.warning} dot>{r.status}</Chip>
-              {r.status === "fulfilled" && (
-                <Btn size="sm" variant="secondary" onClick={() => onMarkReviewed(r.id)}>Mark Reviewed</Btn>
-              )}
-            </div>
-          </Card>
-        ))}
-        {requests.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No upload requests yet.</div></Card>}
-      </div>
-      <Modal open={modal} onClose={() => setModal(false)} title="Request Document Upload">
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>Patient</label>
-            <select value={patId} onChange={e => setPatId(e.target.value)} style={{ width: "100%", padding: "11px 14px", borderRadius: DS.radius.md, border: `1.5px solid ${DS.colors.border}`, fontSize: 14, fontFamily: DS.fonts.body }}>
-              <option value="">Select patient...</option>
-              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-          <Input label="Document Label" value={label} onChange={setLabel} placeholder="Recent Lab Results" required />
-          <Textarea label="Message to Patient" value={message} onChange={setMsg} placeholder="Please upload your most recent bloodwork..." rows={2} />
-          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(false)}>Cancel</Btn>
-            <Btn onClick={doCreate} loading={loading}>Send Request</Btn>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  );
-}
-
-function AdminFollowUp({ followups, patients }) {
-  return (
-    <div>
-      <PageHead title="Follow-Up Responses" subtitle={`${followups.length} responses`} />
-      <div style={{ padding: "24px 36px" }}>
-        {followups.map(f => (
-          <Card key={f.id} style={{ marginBottom: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-              <Avatar name={f.patient?.name} size={32} />
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{f.patient?.name}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{f.questionnaire} · {new Date(f.submitted_at).toLocaleDateString()}</div>
-              </div>
-            </div>
-            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: 12 }}>
-              <pre style={{ fontFamily: DS.fonts.body, fontSize: 12.5, whiteSpace: "pre-wrap", margin: 0, color: DS.colors.ink }}>{JSON.stringify(f.answers, null, 2)}</pre>
-            </div>
-          </Card>
-        ))}
-        {followups.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No follow-up responses yet.</div></Card>}
+        <div style={{ padding: "20px 24px 24px" }}>{children}</div>
       </div>
     </div>
   );
 }
 
-function AdminStaff({ staff, clinic, onRefresh }) {
-  return (
-    <div>
-      <PageHead title="Staff" subtitle={`${staff.length} members`} />
-      <div style={{ padding: "24px 36px" }}>
-        {staff.map(s => (
-          <Card key={s.id} style={{ marginBottom: 10, padding: "14px 18px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <Avatar name={s.name} size={36} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{s.name}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{s.title || s.role?.replace("_", " ")} · {s.email}</div>
-              </div>
-              <Chip color={s.role === "clinic_admin" ? DS.colors.purple : DS.colors.blue}>{s.role?.replace("_", " ")}</Chip>
-            </div>
-          </Card>
-        ))}
-        {staff.length === 0 && <Card><div style={{ textAlign: "center", color: DS.colors.muted, padding: 20 }}>No staff members yet.</div></Card>}
-      </div>
-    </div>
-  );
-}
-
-function AdminAI() {
+// AI Assistant Panel
+function AIAssistant({ standalone = false }) {
   const { aiThinking, aiChat, runAI } = useApp();
   const [input, setInput] = useState("");
   const chatRef = useRef(null);
+
   useEffect(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight; }, [aiChat]);
+
   const send = () => { if (!input.trim()) return; runAI(input); setInput(""); };
 
+  const quickPrompts = ["Analyze patient risk", "Draft a reminder message", "Trigger welcome sequence", "Summarize clinic activity"];
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
-      <PageHead title="AI Assistant" subtitle="Ask questions about your clinic" />
-      <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "24px 36px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ display: "flex", flexDirection: "column", height: standalone ? "100%" : 420 }}>
+      {/* Header */}
+      <div style={{ padding: "16px 20px", background: DS.colors.primary, borderRadius: standalone ? 0 : `${DS.radius.lg}px ${DS.radius.lg}px 0 0`, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 28, height: 28, borderRadius: DS.radius.md, background: DS.colors.accent + "30", display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.accent }}>{I.spark}</div>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13, color: "#fff" }}>RegenFlow AI</div>
+          <div style={{ fontSize: 10.5, color: "#ffffff80" }}>Clinic automation assistant</div>
+        </div>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ADE80", animation: "pulse 2s infinite" }} />
+          <span style={{ fontSize: 10, color: "#ffffff80", fontWeight: 600 }}>LIVE</span>
+        </div>
+      </div>
+
+      {/* Chat */}
+      <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: 16, background: "#F9F9F7", display: "flex", flexDirection: "column", gap: 10 }}>
         {aiChat.length === 0 && (
-          <div style={{ textAlign: "center", paddingTop: 60, color: DS.colors.muted }}>
-            <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: DS.colors.ink }}>RegenFlow AI</div>
-            <div style={{ fontSize: 13, marginTop: 6 }}>Ask me about patient risk, drafting messages, or clinic activity.</div>
+          <div style={{ textAlign: "center", padding: "24px 16px" }}>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>✦</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: DS.colors.ink, marginBottom: 6 }}>AI-Powered Clinic Automation</div>
+            <div style={{ fontSize: 12.5, color: DS.colors.muted, lineHeight: 1.6 }}>Ask me to analyze patient risks, draft outreach messages, trigger automation sequences, or summarize activity.</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginTop: 14 }}>
+              {quickPrompts.map(p => (
+                <button key={p} onClick={() => runAI(p)} style={{ padding: "6px 12px", borderRadius: DS.radius.full, border: `1px solid ${DS.colors.border}`, background: DS.colors.white, fontSize: 11.5, color: DS.colors.primary, cursor: "pointer", fontWeight: 500, fontFamily: DS.fonts.body }}>
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {aiChat.map((m, i) => (
           <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-            <div style={{ maxWidth: "70%", background: m.role === "user" ? DS.colors.primary : DS.colors.white, color: m.role === "user" ? "#fff" : DS.colors.ink, padding: "12px 16px", borderRadius: DS.radius.lg, fontSize: 13.5, lineHeight: 1.6, border: m.role === "ai" ? `1px solid ${DS.colors.border}` : "none", whiteSpace: "pre-wrap" }}>
+            {m.role === "ai" && (
+              <div style={{ width: 24, height: 24, borderRadius: DS.radius.sm, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.accent, fontSize: 12, marginRight: 8, flexShrink: 0, marginTop: 2 }}>{I.spark}</div>
+            )}
+            <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? `${DS.radius.md}px ${DS.radius.md}px 4px ${DS.radius.md}px` : `${DS.radius.md}px ${DS.radius.md}px ${DS.radius.md}px 4px`, background: m.role === "user" ? DS.colors.primary : DS.colors.white, color: m.role === "user" ? "#fff" : DS.colors.ink, fontSize: 13, lineHeight: 1.65, whiteSpace: "pre-line", border: m.role === "ai" ? `1px solid ${DS.colors.border}` : "none", boxShadow: m.role === "ai" ? DS.shadow.sm : "none" }}>
               {m.text}
             </div>
           </div>
         ))}
-        {aiThinking && <div style={{ fontSize: 13, color: DS.colors.muted, fontStyle: "italic" }}>AI is thinking...</div>}
+        {aiThinking && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: 24, height: 24, borderRadius: DS.radius.sm, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.accent, fontSize: 12 }}>{I.spark}</div>
+            <div style={{ padding: "10px 14px", borderRadius: DS.radius.md, background: DS.colors.white, border: `1px solid ${DS.colors.border}` }}>
+              <div style={{ display: "flex", gap: 4 }}>
+                {[0, 1, 2].map(i => <div key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: DS.colors.muted, animation: `pulse 1.4s ${i * 0.2}s infinite` }} />)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div style={{ padding: "16px 36px", borderTop: `1px solid ${DS.colors.border}`, display: "flex", gap: 10 }}>
-        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask anything about your clinic..."
-          style={{ flex: 1, padding: "11px 14px", borderRadius: DS.radius.md, border: `1.5px solid ${DS.colors.border}`, fontSize: 14, fontFamily: DS.fonts.body, outline: "none" }} />
-        <Btn onClick={send} disabled={!input.trim() || aiThinking}>Send</Btn>
+
+      {/* Input */}
+      <div style={{ padding: "12px 14px", borderTop: `1px solid ${DS.colors.border}`, background: DS.colors.white, display: "flex", gap: 8, borderRadius: `0 0 ${DS.radius.lg}px ${DS.radius.lg}px` }}>
+        <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Ask the AI anything…"
+          style={{ flex: 1, border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "9px 13px", fontSize: 13, outline: "none", fontFamily: DS.fonts.body, color: DS.colors.ink, background: DS.colors.surface }} />
+        <Btn size="sm" variant="ai" onClick={send} disabled={!input.trim()}>{I.arrow}</Btn>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SUPER ADMIN PORTAL
-// ─────────────────────────────────────────────────────────────
-function SuperAdminPortal() {
-  const { currentUser, logout, showToast } = useApp();
-  const { isMobile } = useIsMobile();
-  const [tab, setTab] = useState("clinics");
-  const [clinics, setClinics] = useState([]);
-  const [allProfiles, setAllProfiles] = useState([]);
-  const [loading, setLoading] = useState(true);
+// ─────────────────────────────────────────────────────────
+// PUBLIC PAGES
+// ─────────────────────────────────────────────────────────
+function HomePage() {
+  const { setPage } = useApp();
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    Promise.all([getAllClinics(), supabase.from("profiles").select("*, clinics(clinic_name)").order("created_at", { ascending: false })]).then(([c, { data: p }]) => {
-      setClinics(c);
-      setAllProfiles(p || []);
-      setLoading(false);
-    });
+    const h = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", h);
+    return () => window.removeEventListener("scroll", h);
   }, []);
 
-  const handleToggle = async (id, isActive) => {
-    try {
-      await toggleClinicActive(id, !isActive);
-      setClinics(prev => prev.map(c => c.id === id ? { ...c, is_active: !isActive } : c));
-      showToast(`Clinic ${!isActive ? "activated" : "deactivated"}`);
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
+  const features = [
+    { icon: I.forms, title: "Intelligent Intake", desc: "Configurable digital forms patients complete before arrival. No clipboards, no delays." },
+    { icon: I.shield, title: "Consent Capture", desc: "Electronic signatures with timestamps. HIPAA-aligned, audit-ready, always accessible." },
+    { icon: I.upload, title: "Document & Photo Uploads", desc: "Patients upload labs, imaging, and photos directly to their secure portal." },
+    { icon: I.spark, title: "AI Automation Engine", desc: "Automatically flag at-risk patients, draft outreach, and trigger care sequences." },
+    { icon: I.bell, title: "Smart Reminders", desc: "Multi-channel reminders reduce no-shows and incomplete forms by up to 65%." },
+    { icon: I.refresh, title: "Follow-Up Workflows", desc: "Post-treatment questionnaires and check-ins delivered on autopilot." },
+  ];
 
-  const handleCreate = async (name, email, plan) => {
-    try {
-      const c = await createClinic({ clinicName: name, contactEmail: email, planType: plan });
-      setClinics(prev => [c, ...prev]);
-      showToast("Clinic created");
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
+  const stats = [
+    { val: "$38B", label: "Regen medicine market size by 2026", delta: "+21%" },
+    { val: "9,200+", label: "Specialty regen clinics in North America", delta: "+18%" },
+    { val: "67%", label: "Clinics still using paper-based intake", note: "Massive digitization opportunity" },
+    { val: "$150B", label: "Annual revenue lost to no-shows", note: "Across U.S. healthcare providers" },
+  ];
 
-  const navItems = [{ key: "clinics", label: "All Clinics" }, { key: "users", label: "All Users" }];
+  const reasons = [
+    { title: "Built for regenerative medicine", desc: "Not a generic EHR. Designed specifically for PRP, stem cell, shockwave, and longevity clinics with the workflows they actually use." },
+    { title: "AI that works for you", desc: "Automatically surfaces at-risk patients, drafts personalized outreach, and triggers care sequences — so your staff focuses on patients, not admin." },
+    { title: "White-label ready", desc: "Full clinic branding. Your logo, your colors, your portal title. Patients see your clinic — not a third-party tool." },
+    { title: "Multi-tenant architecture", desc: "One platform, unlimited clinics. Each tenant is fully isolated with their own data, branding, staff, and workflows." },
+  ];
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface }}>
-      <Sidebar items={navItems} active={tab} onSelect={setTab} user={currentUser} onLogout={logout} primaryColor={DS.colors.primary} />
-      <main style={{ flex: 1, marginLeft: isMobile ? 0 : 232, marginTop: isMobile ? 56 : 0 }}>
-        {loading ? <Spinner /> : (
-          <>
-            {tab === "clinics" && <SuperClinics clinics={clinics} allProfiles={allProfiles} onToggle={handleToggle} onCreate={handleCreate} />}
-            {tab === "users" && <SuperUsers profiles={allProfiles} />}
-          </>
-        )}
-      </main>
+    <div style={{ fontFamily: DS.fonts.body, background: DS.colors.white, minHeight: "100vh" }}>
+      {/* Nav */}
+      <nav style={{ padding: "0 60px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: scrolled ? "rgba(255,255,255,0.96)" : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: scrolled ? `1px solid ${DS.colors.border}` : "none", zIndex: 50, transition: "all 0.3s ease" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 32, height: 32, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: "0.05em" }}>RF</div>
+          <span style={{ fontWeight: 700, fontSize: 17, color: DS.colors.ink, letterSpacing: "-0.3px" }}>RegenFlow</span>
+        </div>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <Btn variant="ghost" size="sm" onClick={() => setPage("market")}>Market Analysis</Btn>
+          <Btn variant="ghost" size="sm" onClick={() => setPage("login")}>Sign In</Btn>
+          <Btn size="sm" onClick={() => setPage("signup")}>Get Started</Btn>
+        </div>
+      </nav>
+
+      {/* Hero */}
+      <section style={{ padding: "90px 60px 80px", background: "linear-gradient(180deg, #F0F5F2 0%, #FFFFFF 100%)", textAlign: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 30% 50%, #1C453218 0%, transparent 60%), radial-gradient(ellipse at 70% 20%, #C8A96A0C 0%, transparent 55%)", pointerEvents: "none" }} />
+        <div style={{ maxWidth: 740, margin: "0 auto", position: "relative" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: DS.colors.primaryLight, color: DS.colors.primary, padding: "5px 14px", borderRadius: DS.radius.full, fontSize: 12, fontWeight: 600, marginBottom: 28, letterSpacing: "0.05em" }}>
+            {I.spark} <span style={{ color: DS.colors.accent }}>NEW</span> &nbsp;AI-powered patient automation
+          </div>
+          <h1 style={{ fontSize: 60, fontWeight: 300, color: DS.colors.ink, lineHeight: 1.08, letterSpacing: "-2.5px", margin: "0 0 10px", fontFamily: DS.fonts.display }}>
+            The patient platform
+          </h1>
+          <h1 style={{ fontSize: 60, fontWeight: 600, color: DS.colors.primary, lineHeight: 1.08, letterSpacing: "-2.5px", margin: "0 0 28px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>
+            regenerative clinics deserve.
+          </h1>
+          <p style={{ fontSize: 18, color: DS.colors.muted, lineHeight: 1.75, margin: "0 0 44px", fontWeight: 400, maxWidth: 580, marginLeft: "auto", marginRight: "auto" }}>
+            Digitize intake, capture consents, automate follow-up, and give every patient a beautifully branded experience — powered by AI, built for specialty care.
+          </p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <Btn onClick={() => setPage("signup")} size="lg">Start Free Trial {I.arrow}</Btn>
+            <Btn variant="secondary" size="lg" onClick={() => setPage("login")}>View Live Demo</Btn>
+          </div>
+          <div style={{ marginTop: 24, display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap" }}>
+            {["No credit card required", "14-day free trial", "White-label ready"].map(t => (
+              <span key={t} style={{ fontSize: 12, color: DS.colors.muted, display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ color: DS.colors.success }}>{I.check}</span> {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Market stats bar */}
+      <section style={{ background: DS.colors.primary, padding: "32px 60px" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 0 }}>
+          {stats.map((s, i) => (
+            <div key={i} style={{ textAlign: "center", padding: "0 20px", borderRight: i < 3 ? "1px solid #ffffff20" : "none" }}>
+              <div style={{ fontSize: 30, fontWeight: 800, color: DS.colors.accent, letterSpacing: "-1.5px", fontFamily: DS.fonts.display }}>{s.val}</div>
+              <div style={{ fontSize: 12.5, color: "#ffffffa0", marginTop: 4, lineHeight: 1.4 }}>{s.label}</div>
+              {s.delta && <div style={{ fontSize: 11, color: "#4ADE80", fontWeight: 600, marginTop: 3 }}>↑ YoY growth</div>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Features */}
+      <section style={{ padding: "88px 60px", maxWidth: 1160, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 60 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 16 }}>Platform Capabilities</div>
+          <h2 style={{ fontSize: 44, fontWeight: 300, color: DS.colors.ink, letterSpacing: "-1.5px", margin: "0 0 6px", fontFamily: DS.fonts.display }}>
+            Everything your clinic needs,
+          </h2>
+          <h2 style={{ fontSize: 44, fontWeight: 600, color: DS.colors.primary, letterSpacing: "-1.5px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>nothing you don't.</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          {features.map((f, i) => (
+            <Card key={i} style={{ padding: "28px" }} hover>
+              <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primaryLight, display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.primary, marginBottom: 18 }}>{f.icon}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink, marginBottom: 8, letterSpacing: "-0.2px" }}>{f.title}</div>
+              <div style={{ fontSize: 13.5, color: DS.colors.muted, lineHeight: 1.65 }}>{f.desc}</div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* AI Section */}
+      <section style={{ padding: "80px 60px", background: DS.colors.primary, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 80% 50%, #C8A96A18 0%, transparent 60%)", pointerEvents: "none" }} />
+        <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative" }}>
+          <div>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#ffffff15", color: DS.colors.accent, padding: "5px 14px", borderRadius: DS.radius.full, fontSize: 12, fontWeight: 600, marginBottom: 24, letterSpacing: "0.05em" }}>
+              {I.spark} AI Automation Engine
+            </div>
+            <h2 style={{ fontSize: 44, fontWeight: 300, color: "#fff", letterSpacing: "-1.5px", margin: "0 0 6px", fontFamily: DS.fonts.display }}>Your AI clinic</h2>
+            <h2 style={{ fontSize: 44, fontWeight: 600, color: DS.colors.accent, letterSpacing: "-1.5px", margin: "0 0 22px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>co-pilot.</h2>
+            <p style={{ fontSize: 16, color: "#ffffffa0", lineHeight: 1.75, margin: "0 0 32px" }}>
+              RegenFlow AI continuously monitors your patient pipeline, surfaces risks before they become problems, and takes action — so your staff stays focused on care, not admin.
+            </p>
+            {[
+              "Flags patients with incomplete tasks or overdue items",
+              "Drafts personalized reminder & follow-up messages",
+              "Triggers automated care sequences based on treatment stage",
+              "Summarizes clinic activity and completion metrics daily",
+              "Identifies at-risk patients before appointments fall through",
+            ].map((p, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 11 }}>
+                <span style={{ color: DS.colors.accent, flexShrink: 0, marginTop: 1 }}>{I.check}</span>
+                <span style={{ fontSize: 14, color: "#ffffffd0", lineHeight: 1.5 }}>{p}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ borderRadius: DS.radius.xl, overflow: "hidden", boxShadow: DS.shadow.xl, border: "1px solid #ffffff18" }}>
+            <AIAssistant />
+          </div>
+        </div>
+      </section>
+
+      {/* Why RegenFlow */}
+      <section style={{ padding: "80px 60px", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 52 }}>
+          <h2 style={{ fontSize: 40, fontWeight: 300, color: DS.colors.ink, letterSpacing: "-1.5px", fontFamily: DS.fonts.display }}>Purpose-built for</h2>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: DS.colors.primary, letterSpacing: "-1.5px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>specialty regenerative care.</h2>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {reasons.map((r, i) => (
+            <Card key={i} style={{ padding: 32 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: DS.colors.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>0{i + 1}</div>
+              <div style={{ fontWeight: 700, fontSize: 17, color: DS.colors.ink, marginBottom: 10, letterSpacing: "-0.3px" }}>{r.title}</div>
+              <div style={{ fontSize: 14, color: DS.colors.muted, lineHeight: 1.7 }}>{r.desc}</div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section style={{ padding: "80px 60px", background: DS.colors.surface }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", marginBottom: 48 }}>
+            <h2 style={{ fontSize: 36, fontWeight: 600, color: DS.colors.ink, letterSpacing: "-1px", fontFamily: DS.fonts.display }}>Trusted by specialty clinics</h2>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {[
+              { q: "Our intake completion rate jumped from 38% to 91% in the first month. The patient experience is genuinely impressive.", a: "Dr. Amanda Reyes", c: "Scottsdale Regenerative Medicine" },
+              { q: "RegenFlow handles our entire pre-visit workflow. Staff love the dashboard. Patients love how seamless it feels.", a: "James Park, COO", c: "Pacific Longevity Clinic" },
+              { q: "The AI reminders alone saved us 4–5 hours of manual follow-up every week. Honestly transformative for a small team.", a: "Dr. Michelle Torres", c: "Lumina Aesthetics & Wellness" },
+            ].map((t, i) => (
+              <Card key={i} style={{ padding: 28 }}>
+                <div style={{ display: "flex", gap: 2, marginBottom: 16 }}>
+                  {[1, 2, 3, 4, 5].map(s => <span key={s} style={{ color: DS.colors.accent, fontSize: 14 }}>★</span>)}
+                </div>
+                <p style={{ fontSize: 14.5, color: DS.colors.ink, lineHeight: 1.7, margin: "0 0 20px", fontStyle: "italic", fontFamily: DS.fonts.display, fontWeight: 500 }}>"{t.q}"</p>
+                <div style={{ fontWeight: 700, fontSize: 13, color: DS.colors.ink }}>{t.a}</div>
+                <div style={{ fontSize: 12, color: DS.colors.muted }}>{t.c}</div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing */}
+      <section style={{ padding: "80px 60px", maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 52 }}>
+          <h2 style={{ fontSize: 40, fontWeight: 600, color: DS.colors.ink, letterSpacing: "-1.5px", fontFamily: DS.fonts.display }}>Simple pricing</h2>
+          <p style={{ fontSize: 16, color: DS.colors.muted, marginTop: 10 }}>All plans include unlimited patients, AI automation, and full white-label branding.</p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+          {[
+            { name: "Starter", price: "$149", per: "/mo", features: ["Up to 50 active patients", "Digital intake & consent", "File uploads", "Email reminders", "Basic branding"] },
+            { name: "Growth", price: "$299", per: "/mo", popular: true, features: ["Up to 300 active patients", "All modules", "AI Automation Engine", "Email + SMS reminders", "Full white-label", "Priority support"] },
+            { name: "Enterprise", price: "Custom", per: "", features: ["Unlimited patients", "Multi-location", "API access", "Custom integrations", "Dedicated onboarding", "SLA + support"] },
+          ].map((p, i) => (
+            <div key={i} style={{ position: "relative" }}>
+              {p.popular && <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: DS.colors.accent, color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 14px", borderRadius: DS.radius.full, letterSpacing: "0.06em", whiteSpace: "nowrap" }}>MOST POPULAR</div>}
+              <Card style={{ padding: 28, border: p.popular ? `2px solid ${DS.colors.primary}` : undefined }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink, marginBottom: 10 }}>{p.name}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 2, marginBottom: 24 }}>
+                  <span style={{ fontSize: 38, fontWeight: 800, color: DS.colors.ink, letterSpacing: "-2px", fontFamily: DS.fonts.body }}>{p.price}</span>
+                  <span style={{ fontSize: 14, color: DS.colors.muted }}>{p.per}</span>
+                </div>
+                {p.features.map((f, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10, fontSize: 13.5, color: DS.colors.ink }}>
+                    <span style={{ color: DS.colors.primary }}>{I.check}</span>{f}
+                  </div>
+                ))}
+                <Btn style={{ width: "100%", justifyContent: "center", marginTop: 20 }} variant={p.popular ? "primary" : "outline"} onClick={() => setPage("signup")}>
+                  Get Started
+                </Btn>
+              </Card>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section style={{ margin: "0 60px 60px", borderRadius: DS.radius.xl, background: DS.colors.primary, padding: "64px 60px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 50% 100%, #C8A96A18 0%, transparent 60%)", pointerEvents: "none" }} />
+        <h2 style={{ fontSize: 48, fontWeight: 300, color: "#fff", letterSpacing: "-2px", margin: "0 0 6px", fontFamily: DS.fonts.display }}>Ready to modernize</h2>
+        <h2 style={{ fontSize: 48, fontWeight: 600, color: DS.colors.accent, letterSpacing: "-2px", margin: "0 0 20px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>your clinic?</h2>
+        <p style={{ fontSize: 17, color: "#ffffff80", marginBottom: 36, maxWidth: 500, margin: "0 auto 36px" }}>Join specialty clinics already using RegenFlow to deliver a better patient experience.</p>
+        <Btn onClick={() => setPage("signup")} style={{ background: "#fff", color: DS.colors.primary, padding: "14px 36px", fontSize: 15, fontWeight: 700 }}>Start Your Free Trial {I.arrow}</Btn>
+      </section>
+
+      {/* Footer */}
+      <footer style={{ padding: "28px 60px", borderTop: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 28, height: 28, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
+          <span style={{ fontSize: 13, fontWeight: 600, color: DS.colors.ink }}>RegenFlow</span>
+        </div>
+        <div style={{ fontSize: 12, color: DS.colors.muted }}>© 2026 RegenFlow · Patient engagement platform for specialty clinics · Not an EHR or diagnostic tool</div>
+        <div style={{ display: "flex", gap: 16 }}>
+          {["Privacy", "Terms", "Security"].map(l => <span key={l} style={{ fontSize: 12, color: DS.colors.muted, cursor: "pointer" }}>{l}</span>)}
+        </div>
+      </footer>
     </div>
   );
 }
 
-function SuperClinics({ clinics, allProfiles, onToggle, onCreate }) {
-  const [showNew, setShowNew] = useState(false);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [plan, setPlan] = useState("pro");
-  const [creating, setCreating] = useState(false);
+// Market Analysis Page
+function MarketPage() {
+  const { setPage } = useApp();
+  const segments = [
+    { label: "PRP Therapy Clinics", pct: 31, color: DS.colors.primary },
+    { label: "Stem Cell Providers", pct: 26, color: DS.colors.primaryMid },
+    { label: "Longevity / Biohacking", pct: 18, color: DS.colors.accent },
+    { label: "Med Spas (treatment-based)", pct: 14, color: "#7C3AED" },
+    { label: "Orthopedic Injection", pct: 11, color: "#2563EB" },
+  ];
+  const painPoints = [
+    { title: "Paper-Based Intake", stat: "67%", desc: "of specialty clinics still using paper forms or email-based intake — creating delays, errors, and frustrated patients.", opportunity: "Digital intake alone reduces admin time by 50%+" },
+    { title: "No-Show Problem", stat: "$150B", desc: "lost annually across U.S. healthcare from missed appointments. Specialty clinics average 18–22% no-show rates without reminders.", opportunity: "Automated reminders reduce no-shows by up to 40%" },
+    { title: "Manual Follow-Up", stat: "4–6 hrs", desc: "per week spent by staff on manual patient follow-up calls, emails, and consent chasing — time stolen from patient care.", opportunity: "AI automation can reclaim 80% of that time" },
+    { title: "Fragmented Tools", stat: "3.8 apps", desc: "Average number of disconnected tools a specialty clinic uses (email, Google Forms, DocuSign, scheduling software). No unified view.", opportunity: "Single platform = cleaner data, faster decisions" },
+    { title: "Poor Patient Experience", stat: "58%", desc: "of patients say the administrative experience at specialty clinics feels outdated compared to other services they use.", opportunity: "Branded portal raises perceived clinic quality" },
+    { title: "Intake Completion Rates", stat: "38–42%", desc: "Industry average pre-appointment intake completion. Most patients arrive with missing info, creating day-of delays.", opportunity: "RegenFlow customers average 87% completion" },
+  ];
 
-  const doCreate = async () => {
-    if (!name || !email) return;
-    setCreating(true);
-    await onCreate(name, email, plan);
-    setShowNew(false); setName(""); setEmail("");
-    setCreating(false);
+  return (
+    <div style={{ fontFamily: DS.fonts.body, background: DS.colors.white, minHeight: "100vh" }}>
+      <nav style={{ padding: "0 60px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${DS.colors.border}`, background: DS.colors.white }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ width: 30, height: 30, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 12 }}>RF</div>
+          <span style={{ fontWeight: 700, fontSize: 16, color: DS.colors.ink }}>RegenFlow</span>
+        </div>
+        <Btn size="sm" variant="secondary" onClick={() => setPage("home")}>← Back to Home</Btn>
+      </nav>
+
+      <div style={{ maxWidth: 1060, margin: "0 auto", padding: "60px 40px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 60 }}>
+          <Chip color={DS.colors.accent} size="sm">Market Intelligence Report · 2026</Chip>
+          <h1 style={{ fontSize: 52, fontWeight: 300, color: DS.colors.ink, letterSpacing: "-2px", margin: "16px 0 6px", fontFamily: DS.fonts.display }}>The Specialty Clinic</h1>
+          <h1 style={{ fontSize: 52, fontWeight: 600, color: DS.colors.primary, letterSpacing: "-2px", fontFamily: DS.fonts.display, fontStyle: "italic" }}>Market Opportunity</h1>
+          <p style={{ fontSize: 17, color: DS.colors.muted, lineHeight: 1.75, maxWidth: 620, marginTop: 18 }}>A data-driven analysis of the regenerative medicine and specialty clinic market — and why the patient engagement software gap represents a $2B+ untapped opportunity.</p>
+        </div>
+
+        {/* Market size */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 48 }}>
+          {[
+            { val: "$38B", label: "Regen medicine market by 2026", sub: "↑ 21.4% CAGR" },
+            { val: "9,200+", label: "Specialty clinics in North America", sub: "↑ 18% YoY" },
+            { val: "$555B", label: "Projected market size by 2034", sub: "Fortune Business Insights" },
+            { val: "45%", label: "North America market share", sub: "Dominant region" },
+          ].map((s, i) => (
+            <Card key={i} style={{ textAlign: "center", padding: "24px 16px" }}>
+              <div style={{ fontSize: 30, fontWeight: 800, color: DS.colors.primary, letterSpacing: "-1.5px", fontFamily: DS.fonts.body }}>{s.val}</div>
+              <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 6, lineHeight: 1.4 }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: DS.colors.success, fontWeight: 600, marginTop: 4 }}>{s.sub}</div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Target segments */}
+        <Card style={{ marginBottom: 36, padding: 36 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.5px", marginBottom: 6 }}>Target Clinic Segments</h2>
+          <p style={{ fontSize: 14, color: DS.colors.muted, marginBottom: 28, lineHeight: 1.6 }}>RegenFlow targets specialty clinics that operate outside traditional insurance workflows, serve cash-pay patients, and are actively investing in patient experience differentiation.</p>
+          {segments.map((s, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: DS.colors.ink }}>{s.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{s.pct}%</span>
+              </div>
+              <div style={{ height: 8, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden" }}>
+                <div style={{ width: s.pct + "%", height: "100%", background: s.color, borderRadius: DS.radius.full, transition: "width 1s ease" }} />
+              </div>
+            </div>
+          ))}
+        </Card>
+
+        {/* Pain Points */}
+        <h2 style={{ fontSize: 30, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", marginBottom: 8, fontFamily: DS.fonts.display }}>The Pain Points We Solve</h2>
+        <p style={{ fontSize: 15, color: DS.colors.muted, marginBottom: 32, lineHeight: 1.65 }}>
+          Specialty regenerative clinics are among the fastest-growing healthcare segments in North America — yet most still run on disconnected, manual workflows. This is RegenFlow's opening.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 48 }}>
+          {painPoints.map((p, i) => (
+            <Card key={i} style={{ padding: 28 }}>
+              <div style={{ fontSize: 32, fontWeight: 800, color: DS.colors.primary, letterSpacing: "-1.5px", fontFamily: DS.fonts.body, marginBottom: 8 }}>{p.stat}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink, marginBottom: 8 }}>{p.title}</div>
+              <div style={{ fontSize: 13.5, color: DS.colors.muted, lineHeight: 1.65, marginBottom: 14 }}>{p.desc}</div>
+              <div style={{ background: DS.colors.primaryLight, borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 12.5, color: DS.colors.primary, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                {I.zap} {p.opportunity}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Target customer profile */}
+        <Card style={{ padding: 36, marginBottom: 36, background: DS.colors.primary, border: "none" }}>
+          <h2 style={{ fontSize: 24, fontWeight: 700, color: "#fff", marginBottom: 6 }}>Target Customer Profile</h2>
+          <p style={{ fontSize: 14, color: "#ffffff80", marginBottom: 28, lineHeight: 1.65 }}>Based on analysis of clinics like Precision Pointe Regenerative Health</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {[
+              { label: "Clinic Type", items: ["PRP injection clinics", "Stem cell providers", "Shockwave therapy centers", "IV cellular therapy", "Longevity / biohacking", "Med spas (treatment-based)"] },
+              { label: "Business Profile", items: ["1–3 locations", "Cash-pay / HSA/FSA", "$500K–$5M ARR", "2–8 staff members", "50–500 active patients", "Tech-curious ownership"] },
+              { label: "Buying Triggers", items: ["Growing patient volume", "Staff overwhelmed by admin", "Poor intake completion", "No-show rate increasing", "Want premium brand feel", "Referral from colleague"] },
+            ].map((col, i) => (
+              <div key={i}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: DS.colors.accent, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>{col.label}</div>
+                {col.items.map((item, j) => (
+                  <div key={j} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9, fontSize: 13, color: "#ffffffd0" }}>
+                    <span style={{ color: DS.colors.accent, flexShrink: 0 }}>{I.check}</span>{item}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <Btn size="lg" onClick={() => setPage("signup")}>Start Free Trial — See RegenFlow in Action {I.arrow}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LoginPage() {
+  const { login, setPage, showToast } = useApp();
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handle = async () => {
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 600));
+    if (!login(email, pw)) { setErr("Invalid email or password."); showToast("Login failed", "error"); }
+    setLoading(false);
+  };
+
+  const demoAccounts = [
+    { label: "Patient Demo", e: "patient@demo.com", p: "demo1234", color: DS.colors.blue },
+    { label: "Clinic Staff", e: "staff1@precisionpointe.com", p: "demo1234", color: DS.colors.purple },
+    { label: "Clinic Admin", e: "admin@precisionpointe.com", p: "demo1234", color: DS.colors.primary },
+    { label: "Super Admin", e: "admin@regenflow.io", p: "demo1234", color: DS.colors.accent },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", fontFamily: DS.fonts.body }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
+        <div style={{ width: "100%", maxWidth: 380 }}>
+          <div style={{ marginBottom: 36 }}>
+            <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20 }}>RF</div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
+            <p style={{ color: DS.colors.muted, fontSize: 14 }}>Sign in to your RegenFlow account</p>
+          </div>
+          <Input label="Email" value={email} onChange={setEmail} type="email" placeholder="you@clinic.com" style={{ marginBottom: 14 }} onEnter={handle} />
+          <Input label="Password" value={pw} onChange={setPw} type="password" placeholder="••••••••" style={{ marginBottom: 8 }} onEnter={handle} />
+          <div style={{ textAlign: "right", marginBottom: 20 }}>
+            <button onClick={() => setPage("forgot")} style={{ background: "none", border: "none", color: DS.colors.primary, fontSize: 12, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 600 }}>Forgot password?</button>
+          </div>
+          {err && <div style={{ color: DS.colors.danger, fontSize: 13, marginBottom: 14, background: "#FFF5F5", padding: "10px 14px", borderRadius: DS.radius.md, border: "1px solid #FECACA" }}>{err}</div>}
+          <Btn onClick={handle} style={{ width: "100%", justifyContent: "center", padding: "13px" }} loading={loading}>Sign In</Btn>
+
+          <div style={{ margin: "24px 0 16px", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
+            <span style={{ fontSize: 11, color: DS.colors.muted, fontWeight: 600, letterSpacing: "0.07em" }}>DEMO ACCOUNTS</span>
+            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {demoAccounts.map(d => (
+              <button key={d.e} onClick={() => { setEmail(d.e); setPw(d.p); }}
+                style={{ padding: "10px 14px", borderRadius: DS.radius.md, border: `1px solid ${d.color}25`, background: d.color + "0A", color: d.color, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "left", display: "flex", justifyContent: "space-between" }}>
+                <span>{d.label}</span><span style={{ opacity: 0.7, fontWeight: 400 }}>{d.e}</span>
+              </button>
+            ))}
+          </div>
+          <p style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted, marginTop: 24 }}>
+            No account? <button onClick={() => setPage("signup")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign up free</button>
+          </p>
+        </div>
+      </div>
+      <div style={{ flex: 1, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", padding: 60, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 80% 20%, #C8A96A18 0%, transparent 60%)", pointerEvents: "none" }} />
+        <div style={{ color: "#fff", maxWidth: 400, position: "relative" }}>
+          <div style={{ fontFamily: DS.fonts.display, fontSize: 46, fontWeight: 300, letterSpacing: "-2px", lineHeight: 1.1, marginBottom: 8 }}>Streamlined care</div>
+          <div style={{ fontFamily: DS.fonts.display, fontSize: 46, fontWeight: 600, letterSpacing: "-2px", lineHeight: 1.1, color: DS.colors.accent, marginBottom: 24, fontStyle: "italic" }}>starts here.</div>
+          <div style={{ fontSize: 15, color: "#ffffffa0", lineHeight: 1.75 }}>RegenFlow gives your clinic a professional, branded patient experience from first contact to post-visit follow-up.</div>
+          <div style={{ marginTop: 40, display: "flex", flexDirection: "column", gap: 14 }}>
+            {["Patient intake completion avg. 87%", "4+ hrs admin time saved per week", "AI-powered follow-up automation"].map(t => (
+              <div key={t} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "#ffffffc0" }}>
+                <span style={{ color: DS.colors.accent }}>{I.check}</span>{t}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SignupPage() {
+  const { setPage } = useApp();
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ name: "", email: "", pw: "", clinic: "", role: "clinic_admin" });
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <div style={{ width: "100%", maxWidth: 440, padding: 20 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.6px" }}>Create your account</h1>
+          <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Set up your clinic on RegenFlow in minutes</p>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+          {[1, 2].map(s => <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? DS.colors.primary : DS.colors.border, transition: "background 0.3s" }} />)}
+        </div>
+        <Card style={{ padding: 32 }}>
+          {step === 1 ? (
+            <>
+              <Input label="Full Name" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Dr. Jane Smith" style={{ marginBottom: 14 }} />
+              <Input label="Work Email" value={form.email} onChange={v => setForm({ ...form, email: v })} type="email" placeholder="you@clinic.com" style={{ marginBottom: 14 }} />
+              <Input label="Password" value={form.pw} onChange={v => setForm({ ...form, pw: v })} type="password" placeholder="Min 8 characters" style={{ marginBottom: 24 }} />
+              <Btn onClick={() => setStep(2)} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Continue {I.arrow}</Btn>
+            </>
+          ) : (
+            <>
+              <Input label="Clinic Name" value={form.clinic} onChange={v => setForm({ ...form, clinic: v })} placeholder="Scottsdale Regenerative Medicine" style={{ marginBottom: 14 }} />
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 5 }}>Your Role</label>
+                <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "11px 14px", fontSize: 14, color: DS.colors.ink, fontFamily: DS.fonts.body, background: DS.colors.surface, width: "100%" }}>
+                  <option value="clinic_admin">Clinic Admin / Owner</option>
+                  <option value="clinic_staff">Staff Member</option>
+                </select>
+              </div>
+              <Btn onClick={() => setPage("login")} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Create Account</Btn>
+            </>
+          )}
+          <p style={{ textAlign: "center", fontSize: 12.5, color: DS.colors.muted, marginTop: 16 }}>
+            Already have an account? <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign in</button>
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ForgotPage() {
+  const { setPage, showToast } = useApp();
+  const [email, setEmail] = useState("");
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <div style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+        <Card style={{ padding: 36 }}>
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.5px", margin: "0 0 6px" }}>Reset your password</h2>
+            <p style={{ fontSize: 13.5, color: DS.colors.muted }}>Enter your email and we'll send reset instructions.</p>
+          </div>
+          <Input label="Email Address" value={email} onChange={setEmail} type="email" placeholder="you@clinic.com" style={{ marginBottom: 20 }} />
+          <Btn onClick={() => { showToast("Reset link sent — check your email."); setPage("login"); }} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Send Reset Link</Btn>
+          <p style={{ textAlign: "center", fontSize: 12.5, color: DS.colors.muted, marginTop: 16 }}>
+            <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>← Back to sign in</button>
+          </p>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// PATIENT PORTAL
+// ─────────────────────────────────────────────────────────
+function PatientPortal() {
+  const { currentUser, clinic, primaryColor, logout } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const [active, setActive] = useState("pd");
+  const isCollapsed = isMobile || isTablet;
+
+  const nav = [
+    { key: "pd", label: "Dashboard", icon: I.home },
+    { key: "pp", label: "My Profile", icon: I.user },
+    { key: "pt", label: "My Tasks", icon: I.check },
+    { key: "pi", label: "Intake Form", icon: I.forms },
+    { key: "pc", label: "Consent Forms", icon: I.shield },
+    { key: "pu", label: "Upload Files", icon: I.upload },
+    { key: "pa", label: "Appointments", icon: I.calendar },
+    { key: "pin", label: "Instructions", icon: I.info },
+    { key: "pf", label: "Follow-Up", icon: I.refresh },
+    { key: "pm", label: "Support", icon: I.msg },
+  ];
+  const pages = {
+    pd: <PatientDash />, pp: <PatientProfile />, pt: <PatientTasks />,
+    pi: <PatientIntake />, pc: <PatientConsent />, pu: <PatientUploads />,
+    pa: <PatientAppointments />, pin: <PatientInstructions />,
+    pf: <PatientFollowUp />, pm: <PatientMessages />,
+  };
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <Sidebar items={nav} active={active} onSelect={setActive} user={currentUser} clinic={clinic} onLogout={logout} primaryColor={primaryColor} />
+      <div style={{ marginLeft: isCollapsed ? 0 : 232, flex: 1, minHeight: "100vh", paddingTop: isCollapsed ? 56 : 0 }}>
+        {pages[active] || <PatientDash />}
+      </div>
+    </div>
+  );
+}
+
+function PatientDash() {
+  const { currentUser, clinic, tasks, primaryColor } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isSmall = isMobile || isTablet;
+  const myTasks = tasks[currentUser.id] || [];
+  const pending = myTasks.filter(t => t.status !== "completed");
+  const done = myTasks.filter(t => t.status === "completed");
+  const pct = myTasks.length ? Math.round((done.length / myTasks.length) * 100) : 0;
+  const pc = primaryColor;
+  const pad = isMobile ? "16px" : isTablet ? "20px 24px" : "28px 36px";
+  return (
+    <div>
+      <div style={{ padding: isMobile ? "16px" : "28px 36px 24px", background: pc, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(ellipse at 80% 50%, #ffffff10 0%, transparent 60%)", pointerEvents: "none" }} />
+        <div style={{ position: "relative" }}>
+          <div style={{ fontSize: 11, color: "#ffffff70", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}>{clinic?.clinic_name}</div>
+          <h1 style={{ fontSize: isMobile ? 20 : 26, fontWeight: 700, color: "#fff", margin: "0 0 4px", letterSpacing: "-0.5px" }}>Hello, {currentUser.name.split(" ")[0]} 👋</h1>
+          <p style={{ color: "#ffffff80", fontSize: 13, margin: "0 0 16px" }}>{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 160, maxWidth: 280 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                <span style={{ fontSize: 12, color: "#ffffff90", fontWeight: 600 }}>Preparation Progress</span>
+                <span style={{ fontSize: 12, color: "#fff", fontWeight: 700 }}>{pct}%</span>
+              </div>
+              <div style={{ height: 6, borderRadius: DS.radius.full, background: "#ffffff30", overflow: "hidden" }}>
+                <div style={{ width: pct + "%", height: "100%", background: DS.colors.accent, borderRadius: DS.radius.full, transition: "width 1s ease" }} />
+              </div>
+            </div>
+            <Chip color={DS.colors.accent}>{pending.length} remaining</Chip>
+          </div>
+        </div>
+      </div>
+      <div style={{ padding: pad }}>
+        <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 10 : 16, marginBottom: isMobile ? 14 : 24 }}>
+          <StatCard label="Pending Tasks" value={pending.length} icon={I.check} color={pc} />
+          <StatCard label="Completed" value={done.length} icon={I.check} color={DS.colors.success} />
+          {!isMobile && <StatCard label="Next Appt." value="Jan 20" icon={I.calendar} color={DS.colors.blue} />}
+          {!isMobile && <StatCard label="Status" value="Active" icon={I.check} color={DS.colors.purple} />}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr" : "2fr 1fr", gap: isMobile ? 12 : 24 }}>
+          <Card>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: DS.colors.ink }}>Pending Tasks</h3>
+              <Chip color={DS.colors.warning} dot>{pending.length} left</Chip>
+            </div>
+            {pending.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "36px 20px", color: DS.colors.muted }}>
+                <div style={{ fontSize: 32, marginBottom: 10 }}>🎉</div>
+                <div style={{ fontWeight: 600, fontSize: 14, color: DS.colors.ink }}>All tasks complete!</div>
+              </div>
+            ) : pending.map(t => (
+              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: statusColor(t.status), flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: DS.colors.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: isSmall ? "nowrap" : "normal" }}>{t.title}</div>
+                  <div style={{ fontSize: 11, color: DS.colors.muted }}>Due {t.due}</div>
+                </div>
+                {!isMobile && <Chip color={statusColor(t.status)} dot>{statusLabel(t.status)}</Chip>}
+              </div>
+            ))}
+          </Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: DS.colors.ink }}>Next Appointment</h3>
+              <div style={{ background: pc + "10", borderRadius: DS.radius.md, padding: "13px 14px", border: `1px solid ${pc}20` }}>
+                <div style={{ fontWeight: 700, color: DS.colors.ink, fontSize: 14 }}>January 20, 2025</div>
+                <div style={{ color: DS.colors.muted, fontSize: 12.5, marginTop: 2 }}>10:00 AM · PRP Knee Treatment</div>
+                <div style={{ color: pc, fontSize: 12, fontWeight: 600, marginTop: 6 }}>{clinic?.clinic_name}</div>
+              </div>
+            </Card>
+            {!isMobile && (
+              <Card>
+                <h3 style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: DS.colors.ink }}>Your Treatment</h3>
+                <div style={{ fontSize: 13.5, color: DS.colors.ink, fontWeight: 600, marginBottom: 4 }}>{currentUser.treatment}</div>
+                <div style={{ fontSize: 12.5, color: DS.colors.muted, lineHeight: 1.6 }}>{clinic?.tagline}</div>
+              </Card>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PatientProfile() {
+  const { currentUser, showToast, clinic } = useApp();
+  const [form, setForm] = useState({ name: currentUser.name, email: currentUser.email, phone: currentUser.phone || "", dob: currentUser.dob || "" });
+  const [showPwModal, setShowPwModal] = useState(false);
+  const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
+  const changePw = () => {
+    if (!pw.current || !pw.next) { showToast("Fill in all fields", "error"); return; }
+    if (pw.next !== pw.confirm) { showToast("New passwords do not match", "error"); return; }
+    if (pw.next.length < 6) { showToast("Password must be at least 6 characters", "error"); return; }
+    showToast("Password updated successfully");
+    setShowPwModal(false);
+    setPw({ current: "", next: "", confirm: "" });
+  };
+  return (
+    <div>
+      <Modal open={showPwModal} onClose={() => setShowPwModal(false)} title="Change Password" width={420}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Input label="Current Password" value={pw.current} onChange={v => setPw(p => ({...p, current: v}))} type="password" placeholder="••••••••" />
+          <Input label="New Password" value={pw.next} onChange={v => setPw(p => ({...p, next: v}))} type="password" placeholder="Min 6 characters" />
+          <Input label="Confirm New Password" value={pw.confirm} onChange={v => setPw(p => ({...p, confirm: v}))} type="password" placeholder="Re-enter new password" />
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+            <Btn variant="secondary" onClick={() => setShowPwModal(false)}>Cancel</Btn>
+            <Btn onClick={changePw}>Update Password</Btn>
+          </div>
+        </div>
+      </Modal>
+      <PageHead title="My Profile" subtitle="Manage your personal information" actions={<Btn onClick={() => showToast("Profile saved!")}>Save Changes</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <Card>
+            <h3 style={{ margin: "0 0 20px", fontSize: 15, fontWeight: 700 }}>Personal Information</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <Input label="Full Name" value={form.name} onChange={v => setForm({ ...form, name: v })} />
+              <Input label="Email Address" value={form.email} onChange={v => setForm({ ...form, email: v })} type="email" />
+              <Input label="Phone Number" value={form.phone} onChange={v => setForm({ ...form, phone: v })} placeholder="(555) 000-0000" />
+              <Input label="Date of Birth" value={form.dob} onChange={v => setForm({ ...form, dob: v })} type="date" />
+            </div>
+          </Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Account Info</h3>
+              {[["Clinic", clinic?.clinic_name], ["Member Since", currentUser.joined || "2024"], ["Treatment", currentUser.treatment], ["Status", "Active"]].map(([l, v]) => (
+                <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${DS.colors.border}`, fontSize: 13 }}>
+                  <span style={{ color: DS.colors.muted }}>{l}</span>
+                  <span style={{ fontWeight: 600, color: DS.colors.ink }}>{v}</span>
+                </div>
+              ))}
+            </Card>
+            <Card>
+              <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 700 }}>Security</h3>
+              <Btn variant="secondary" style={{ width: "100%", justifyContent: "center" }} onClick={() => setShowPwModal(true)}>Change Password</Btn>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PatientTasks() {
+  const { currentUser, tasks, updateTask } = useApp();
+  const myTasks = tasks[currentUser.id] || [];
+  const groups = { not_started: myTasks.filter(t => t.status === "not_started"), in_progress: myTasks.filter(t => t.status === "in_progress"), completed: myTasks.filter(t => t.status === "completed") };
+  return (
+    <div>
+      <PageHead title="My Tasks" subtitle="Complete all required items before your appointment" />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+          <StatCard label="Not Started" value={groups.not_started.length} icon={I.check} color={DS.colors.muted} />
+          <StatCard label="In Progress" value={groups.in_progress.length} icon={I.refresh} color={DS.colors.warning} />
+          <StatCard label="Completed" value={groups.completed.length} icon={I.check} color={DS.colors.success} />
+        </div>
+        <Card>
+          <h3 style={{ margin: "0 0 0", fontSize: 15, fontWeight: 700, paddingBottom: 14, borderBottom: `1px solid ${DS.colors.border}` }}>All Tasks</h3>
+          {myTasks.length === 0 ? <div style={{ padding: "40px", textAlign: "center", color: DS.colors.muted }}>No tasks assigned yet.</div>
+            : myTasks.map(t => <TaskRow key={t.id} task={t} onUpdate={(id, s) => updateTask(currentUser.id, id, s)} canUpdate />)}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PatientIntake() {
+  const { currentUser, showToast, tasks, updateTask } = useApp();
+  const [submitted, setSubmitted] = useState(false);
+  const [answers, setAnswers] = useState({});
+  const form = SEED.intakeForms.find(f => f.clinic_id === currentUser.clinic_id);
+  const myTasks = tasks[currentUser.id] || [];
+  const intakeTask = myTasks.find(t => t.type === "intake");
+  if (intakeTask?.status === "completed" || submitted) return (
+    <div><PageHead title="Intake Forms" subtitle="Medical history and intake information" />
+      <div style={{ padding: "60px 36px", textAlign: "center" }}>
+        <Card style={{ maxWidth: 420, margin: "0 auto", padding: 44 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+          <h3 style={{ fontWeight: 700, color: DS.colors.ink, margin: "0 0 8px" }}>Form Submitted</h3>
+          <p style={{ color: DS.colors.muted, fontSize: 14, lineHeight: 1.65 }}>Your intake form has been received. Our team will review it before your appointment.</p>
+        </Card>
+      </div>
+    </div>
+  );
+  return (
+    <div>
+      <PageHead title="Intake Forms" subtitle="Please complete all required fields" />
+      <div style={{ padding: "28px 36px" }}>
+        <Card style={{ maxWidth: 680 }}>
+          <h3 style={{ margin: "0 0 4px", fontSize: 18, fontWeight: 700 }}>{form?.title}</h3>
+          <p style={{ color: DS.colors.muted, fontSize: 13.5, margin: "0 0 24px", lineHeight: 1.6 }}>{form?.description}</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {form?.fields.map(f => (
+              <div key={f.id}>
+                {f.type === "textarea" ? <Textarea label={f.label} required={f.required} value={answers[f.id] || ""} onChange={v => setAnswers({ ...answers, [f.id]: v })} />
+                  : f.type === "radio" ? (
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em" }}>{f.label}{f.required && <span style={{ color: DS.colors.danger }}> *</span>}</label>
+                      <div style={{ display: "flex", gap: 20, marginTop: 10 }}>
+                        {f.options.map(o => (
+                          <label key={o} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 14, color: DS.colors.ink }}>
+                            <input type="radio" name={f.id} value={o} checked={answers[f.id] === o} onChange={() => setAnswers({ ...answers, [f.id]: o })} />
+                            {o}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : <Input label={f.label} required={f.required} type={f.type} value={answers[f.id] || ""} onChange={v => setAnswers({ ...answers, [f.id]: v })} />}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid ${DS.colors.border}` }}>
+            <Btn onClick={() => { setSubmitted(true); if (intakeTask) updateTask(currentUser.id, intakeTask.id, "completed"); showToast("Intake form submitted!"); }}>Submit Intake Form</Btn>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PatientConsent() {
+  const { currentUser, showToast, tasks, updateTask } = useApp();
+  const [signed, setSigned] = useState(false);
+  const [sig, setSig] = useState("");
+  const myTasks = tasks[currentUser.id] || [];
+  const consentTask = myTasks.find(t => t.type === "consent" && t.status !== "completed");
+  // Pick consent based on task title or treatment
+  const treatmentLower = (currentUser.treatment || "").toLowerCase();
+  const consent = SEED.consentForms.find(c => {
+    if (c.clinic_id !== currentUser.clinic_id) return false;
+    if (treatmentLower.includes("stem")) return c.id === "consent_2";
+    if (treatmentLower.includes("prp")) return c.id === "consent_1";
+    return c.id === "consent_3";
+  }) || SEED.consentForms[0];
+  return (
+    <div>
+      <PageHead title="Consent Forms" subtitle="Review and sign required consent documents" />
+      <div style={{ padding: "28px 36px" }}>
+        {signed ? (
+          <Card style={{ maxWidth: 480, textAlign: "center", padding: 44 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+            <h3 style={{ fontWeight: 700, margin: "0 0 8px" }}>Consent Signed</h3>
+            <p style={{ color: DS.colors.muted, fontSize: 13.5 }}>Signed {new Date().toLocaleString()} · Stored securely</p>
+          </Card>
+        ) : (
+          <Card style={{ maxWidth: 680 }}>
+            <h3 style={{ margin: "0 0 18px", fontSize: 18, fontWeight: 700 }}>{consent?.title}</h3>
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: 20, marginBottom: 22, maxHeight: 300, overflowY: "auto", fontSize: 13, lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", border: `1px solid ${DS.colors.border}` }}>{consent?.content}</div>
+            <Input label="Type your full legal name to sign" value={sig} onChange={setSig} placeholder="e.g. Jordan Rivera" style={{ marginBottom: 12 }} />
+            <div style={{ fontSize: 12, color: DS.colors.muted, marginBottom: 20, lineHeight: 1.6 }}>By typing your name, you are providing your electronic signature and agreeing to the above consent.</div>
+            <Btn onClick={() => { if (!sig.trim()) { showToast("Please enter your full name", "error"); return; } setSigned(true); if (consentTask) updateTask(currentUser.id, consentTask.id, "completed"); showToast("Consent signed and recorded!"); }}>
+              {I.shield} Sign & Submit Consent
+            </Btn>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PatientUploads() {
+  const { showToast, tasks, currentUser, updateTask } = useApp();
+  const [uploads, setUploads] = useState([{ id: "u1", name: "Lab_Results_2024.pdf", size: "244 KB", date: "2025-01-08", status: "reviewed" }]);
+  const simulate = () => {
+    const names = ["Insurance_Card.jpg", "MRI_Report.pdf", "Blood_Panel.pdf", "Photo_Treatment_Area.jpg"];
+    const n = names[Math.floor(Math.random() * names.length)];
+    setUploads(prev => [...prev, { id: "u" + Date.now(), name: n, size: Math.floor(100 + Math.random() * 900) + " KB", date: new Date().toISOString().split("T")[0], status: "pending" }]);
+    const ut = (tasks[currentUser.id] || []).find(t => t.type === "upload" && t.status !== "completed");
+    if (ut) updateTask(currentUser.id, ut.id, "completed");
+    showToast("File uploaded successfully!");
+  };
+  return (
+    <div>
+      <PageHead title="File Uploads" subtitle="Upload requested documents and photos" actions={<Btn onClick={simulate}>{I.upload} Upload File</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <Card>
+          <div style={{ border: `2px dashed ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "44px", textAlign: "center", marginBottom: 24, cursor: "pointer", transition: "border-color 0.2s" }}
+            onClick={simulate} onMouseEnter={e => e.currentTarget.style.borderColor = DS.colors.primary} onMouseLeave={e => e.currentTarget.style.borderColor = DS.colors.border}>
+            <div style={{ fontSize: 36, marginBottom: 12 }}>📁</div>
+            <div style={{ fontWeight: 600, color: DS.colors.ink, marginBottom: 4, fontSize: 14 }}>Click to upload or drag & drop</div>
+            <div style={{ fontSize: 12.5, color: DS.colors.muted }}>PDF, JPG, PNG · Max 25MB per file</div>
+          </div>
+          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Uploaded Files</h3>
+          {uploads.map(f => (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+              <div style={{ fontSize: 22 }}>{f.name.endsWith(".pdf") ? "📄" : "🖼️"}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: DS.colors.ink }}>{f.name}</div>
+                <div style={{ fontSize: 11.5, color: DS.colors.muted }}>{f.size} · {f.date}</div>
+              </div>
+              <Chip color={f.status === "reviewed" ? DS.colors.success : DS.colors.warning} dot>{f.status === "reviewed" ? "Reviewed" : "Pending Review"}</Chip>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function PatientAppointments() {
+  const { currentUser, appointments, addAppointment, showToast } = useApp();
+  const [form, setForm] = useState({ requested_date: "", requested_time: "", reason: "" });
+  const myAppts = appointments.filter(a => a.patient_id === currentUser.id);
+  return (
+    <div>
+      <PageHead title="Appointments" subtitle="Request and manage your appointments" />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <Card>
+            <h3 style={{ margin: "0 0 18px", fontSize: 15, fontWeight: 700 }}>Request an Appointment</h3>
+            <Input label="Preferred Date" value={form.requested_date} onChange={v => setForm({ ...form, requested_date: v })} type="date" style={{ marginBottom: 14 }} required />
+            <Input label="Preferred Time" value={form.requested_time} onChange={v => setForm({ ...form, requested_time: v })} placeholder="e.g. 10:00 AM" style={{ marginBottom: 14 }} />
+            <Textarea label="Reason for Visit" value={form.reason} onChange={v => setForm({ ...form, reason: v })} placeholder="Describe your reason for visiting…" required style={{ marginBottom: 20 }} />
+            <Btn onClick={() => { if (!form.requested_date || !form.reason) { showToast("Fill in required fields", "error"); return; } addAppointment(currentUser.id, form); setForm({ requested_date: "", requested_time: "", reason: "" }); }}>Submit Request</Btn>
+          </Card>
+          <Card>
+            <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Appointment History</h3>
+            {myAppts.length === 0 ? <div style={{ textAlign: "center", padding: "30px", color: DS.colors.muted }}>No appointments yet.</div>
+              : myAppts.map(a => (
+                <div key={a.id} style={{ padding: "12px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, color: DS.colors.ink }}>{a.requested_date} · {a.requested_time}</div>
+                      <div style={{ fontSize: 12.5, color: DS.colors.muted, marginTop: 2 }}>{a.reason}</div>
+                    </div>
+                    <Chip color={a.status === "confirmed" ? DS.colors.success : DS.colors.warning} dot>{a.status}</Chip>
+                  </div>
+                </div>
+              ))}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PatientInstructions() {
+  const { currentUser } = useApp();
+  const treatmentLower = (currentUser.treatment || "").toLowerCase();
+  const isShockwave = treatmentLower.includes("shock");
+  const instrs = SEED.instructions.filter(i => {
+    if (i.clinic_id !== currentUser.clinic_id) return false;
+    if (isShockwave) return i.id === "instr_3" || i.id === "instr_4";
+    return i.id === "instr_1" || i.id === "instr_2";
+  });
+  return (
+    <div>
+      <PageHead title="Instructions" subtitle="Pre-visit and post-visit care information" />
+      <div style={{ padding: "28px 36px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {instrs.map(instr => (
+          <Card key={instr.id}>
+            <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+              <div style={{ width: 40, height: 40, borderRadius: DS.radius.md, background: instr.type === "pre_visit" ? "#DBEAFE" : DS.colors.primaryLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                {instr.type === "pre_visit" ? "📋" : "🌿"}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink }}>{instr.title}</div>
+                <div style={{ fontSize: 12, color: DS.colors.muted }}>{instr.type === "pre_visit" ? "Before Your Visit" : "After Your Visit"}</div>
+              </div>
+            </div>
+            <ol style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+              {instr.content.map((c, j) => <li key={j} style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.65 }}>{c}</li>)}
+            </ol>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PatientFollowUp() {
+  const { showToast, tasks, updateTask, currentUser } = useApp();
+  const myTasks = tasks[currentUser?.id] || [];
+  const [submitted, setSubmitted] = useState(false);
+  const [answers, setAnswers] = useState({ pain: "", swelling: "", notes: "" });
+  return (
+    <div>
+      <PageHead title="Follow-Up Check-In" subtitle="Help us track your recovery progress" />
+      <div style={{ padding: "28px 36px" }}>
+        {submitted ? (
+          <Card style={{ maxWidth: 480, textAlign: "center", padding: 44 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+            <h3 style={{ fontWeight: 700, margin: "0 0 8px" }}>Check-In Received</h3>
+            <p style={{ color: DS.colors.muted, fontSize: 13.5 }}>Thank you. Your care team will review your response within one business day.</p>
+          </Card>
+        ) : (
+          <Card style={{ maxWidth: 600 }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 700 }}>48-Hour Post-Treatment Check-In</h3>
+            <p style={{ color: DS.colors.muted, fontSize: 13.5, margin: "0 0 24px", lineHeight: 1.6 }}>Please answer honestly so our team can monitor your recovery.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Input label="Current Pain Level (1–10)" value={answers.pain} onChange={v => setAnswers({ ...answers, pain: v })} placeholder="Enter a number from 1 to 10" />
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Have you experienced swelling?</label>
+                <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                  {["Yes — mild", "Yes — moderate", "No swelling"].map(o => (
+                    <label key={o} style={{ display: "flex", alignItems: "center", gap: 7, cursor: "pointer", fontSize: 14, color: DS.colors.ink }}>
+                      <input type="radio" name="swelling" checked={answers.swelling === o} onChange={() => setAnswers({ ...answers, swelling: o })} />
+                      {o}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <Textarea label="Additional Notes or Concerns" value={answers.notes} onChange={v => setAnswers({ ...answers, notes: v })} placeholder="Share anything else about how you're feeling…" />
+            </div>
+            <Btn onClick={() => {
+              if (!answers.pain && !answers.swelling) { showToast("Please answer at least one question", "error"); return; }
+              setSubmitted(true);
+              // Mark followup task complete
+              const fu = myTasks.find(t => t.type === "followup" && t.status !== "completed");
+              if (fu) updateTask(currentUser.id, fu.id, "completed");
+              showToast("Follow-up check-in submitted!");
+            }} style={{ marginTop: 24 }}>Submit Check-In</Btn>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PatientMessages() {
+  const { showToast } = useApp();
+  const [msg, setMsg] = useState("");
+  const [subject, setSubject] = useState("");
+  return (
+    <div>
+      <PageHead title="Support" subtitle="Contact your care team" />
+      <div style={{ padding: "28px 36px" }}>
+        <Card style={{ maxWidth: 580 }}>
+          <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 700 }}>Send a Message</h3>
+          <Input label="Subject" value={subject} onChange={setSubject} placeholder="e.g. Question about pre-treatment instructions" style={{ marginBottom: 14 }} />
+          <Textarea label="Message" value={msg} onChange={setMsg} placeholder="How can we help?" style={{ marginBottom: 20 }} />
+          <Btn onClick={() => { if (!subject.trim() || !msg.trim()) { showToast("Please fill in subject and message", "error"); return; } showToast("Message sent to your care team!"); setMsg(""); setSubject(""); }}>{I.msg} Send Message</Btn>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// ADMIN PORTAL
+// ─────────────────────────────────────────────────────────
+function AdminPortal() {
+  const { currentUser, clinic, primaryColor, logout, showToast } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isCollapsed = isMobile || isTablet;
+  const [active, setActive] = useState("ad");
+  const [showInvitePatient, setShowInvitePatient] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePhone, setInvitePhone] = useState("");
+  const [inviteTreatment, setInviteTreatment] = useState("");
+  const [inviting, setInviting] = useState(false);
+
+  const aiInsights = SEED.aiInsights;
+  const highRisk = aiInsights.filter(a => a.severity === "high").length;
+
+  const doInvitePatient = async () => {
+    if (!inviteName.trim() || !inviteEmail.trim()) { showToast("Name and email are required", "error"); return; }
+    setInviting(true);
+    await new Promise(r => setTimeout(r, 800));
+    setInviting(false);
+    setShowInvitePatient(false);
+    setInviteName(""); setInviteEmail(""); setInvitePhone(""); setInviteTreatment("");
+    showToast(`Invitation sent to ${inviteName} — they will receive a portal setup email`);
+  };
+
+  const nav = [
+    { key: "ad", label: "Dashboard", icon: I.home },
+    { key: "ap", label: "Patients", icon: I.patients },
+    { key: "apd", label: "Patient Detail", icon: I.user },
+    { key: "aai", label: "AI Assistant", icon: I.spark, badge: highRisk || undefined },
+    { key: "aft", label: "Form Templates", icon: I.forms },
+    { key: "acr", label: "Consent Records", icon: I.shield },
+    { key: "auf", label: "Uploaded Files", icon: I.upload },
+    { key: "afq", label: "Follow-Up", icon: I.refresh },
+    { key: "arm", label: "Reminders", icon: I.bell },
+    { key: "abs", label: "Branding", icon: I.settings },
+    { key: "asu", label: "Staff Users", icon: I.user },
+  ];
+
+  const pages = {
+    ad: <AdminDash onNav={setActive} />,
+    ap: <AdminPatients onSelect={() => setActive("apd")} onInvite={() => setShowInvitePatient(true)} />,
+    apd: <AdminPatientDetail />,
+    aai: <AdminAIPage />,
+    aft: <AdminForms />,
+    acr: <AdminConsents />,
+    auf: <AdminUploads />,
+    afq: <AdminFollowUp />,
+    arm: <AdminReminders />,
+    abs: <AdminBranding />,
+    asu: <AdminStaff />,
+  };
+
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <Modal open={showInvitePatient} onClose={() => setShowInvitePatient(false)} title="Invite New Patient" subtitle="Patient will receive a portal setup email" width={460}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Input label="Patient Full Name" value={inviteName} onChange={setInviteName} placeholder="Jordan Rivera" required />
+          <Input label="Email Address" value={inviteEmail} onChange={setInviteEmail} type="email" placeholder="patient@email.com" required />
+          <Input label="Phone Number" value={invitePhone} onChange={setInvitePhone} placeholder="(555) 000-0000" />
+          <Input label="Treatment / Reason for Visit" value={inviteTreatment} onChange={setInviteTreatment} placeholder="e.g. PRP Knee Therapy" />
+          <div style={{ background: DS.colors.primaryLight, borderRadius: DS.radius.md, padding: "12px 14px", fontSize: 12.5, color: DS.colors.primary, border: `1px solid ${DS.colors.primary}20` }}>
+            {I.info}&nbsp; The patient will receive an email with a link to create their account and access your branded portal.
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowInvitePatient(false)}>Cancel</Btn>
+            <Btn onClick={doInvitePatient} loading={inviting}>{I.user} Send Invitation</Btn>
+          </div>
+        </div>
+      </Modal>
+      <Sidebar items={nav} active={active} onSelect={setActive} user={currentUser} clinic={clinic} onLogout={logout} primaryColor={primaryColor} />
+      <div style={{ marginLeft: isCollapsed ? 0 : 232, flex: 1, paddingTop: isCollapsed ? 56 : 0 }}>
+        {pages[active] || <AdminDash onNav={setActive} />}
+      </div>
+    </div>
+  );
+}
+
+function AdminDash({ onNav }) {
+  const { currentUser, tasks, primaryColor, setSelectedPatientId } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isSmall = isMobile || isTablet;
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const allTasks = patients.flatMap(p => tasks[p.id] || []);
+  const pendingIntake = allTasks.filter(t => t.type === "intake" && t.status !== "completed").length;
+  const pendingUploads = allTasks.filter(t => t.type === "upload" && t.status !== "completed").length;
+  const pendingConsents = allTasks.filter(t => t.type === "consent" && t.status !== "completed").length;
+  const pc = primaryColor;
+  const pad = isMobile ? "14px" : isTablet ? "20px 24px" : "28px 36px";
+
+  const handlePatientClick = (patientId) => {
+    setSelectedPatientId(patientId);
+    onNav("apd");
   };
 
   return (
     <div>
-      <PageHead title="All Clinics" subtitle={`${clinics.length} tenants`}
-        actions={<Btn size="sm" onClick={() => setShowNew(true)}>New Clinic</Btn>} />
-      <div style={{ padding: "24px 36px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-          {clinics.map(c => {
-            const patientCount = allProfiles.filter(p => p.clinic_id === c.id && p.role === "patient").length;
-            const staffCount = allProfiles.filter(p => p.clinic_id === c.id && p.role !== "patient").length;
-            return (
-              <Card key={c.id} style={{ opacity: c.is_active ? 1 : 0.6 }}>
-                <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: c.primary_color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18, color: c.primary_color }}>{c.clinic_name[0]}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{c.clinic_name}</div>
-                    <div style={{ fontSize: 12, color: DS.colors.muted }}>{c.contact_email}</div>
-                  </div>
-                  <Chip color={c.is_active ? DS.colors.success : DS.colors.muted} dot>{c.is_active ? "Active" : "Inactive"}</Chip>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 14 }}>
-                  {[["Patients", patientCount], ["Staff", staffCount], ["Plan", c.plan_type]].map(([l, v]) => (
-                    <div key={l} style={{ textAlign: "center", padding: "8px", background: DS.colors.surface, borderRadius: DS.radius.md }}>
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>{v}</div>
-                      <div style={{ fontSize: 10, color: DS.colors.muted }}>{l}</div>
+      <PageHead title="Clinic Dashboard"
+        subtitle={new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+        eyebrow="Staff Overview"
+        actions={<Btn size="sm" variant="ai" onClick={() => onNav("aai")}>{I.spark} {!isMobile && "AI Assistant"}</Btn>} />
+      <div style={{ padding: pad }}>
+        <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 10 : 16, marginBottom: isMobile ? 14 : 24 }}>
+          <StatCard label="Active Patients" value={patients.length} icon={I.patients} color={pc} delta={12} />
+          <StatCard label="Pending Intake" value={pendingIntake} icon={I.forms} color={DS.colors.warning} />
+          {!isMobile && <StatCard label="Pending Uploads" value={pendingUploads} icon={I.upload} color={DS.colors.purple} />}
+          {!isMobile && <StatCard label="Pending Consents" value={pendingConsents} icon={I.shield} color={DS.colors.blue} />}
+        </div>
+
+        {/* AI Insights Banner */}
+        <div style={{ background: DS.colors.primary, borderRadius: DS.radius.lg, padding: isMobile ? "14px 16px" : "20px 24px", marginBottom: isMobile ? 14 : 24, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ width: 36, height: 36, borderRadius: DS.radius.md, background: DS.colors.accent + "30", display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.accent, flexShrink: 0 }}>{I.spark}</div>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: "#fff", marginBottom: 2 }}>AI flagged {SEED.aiInsights.length} items requiring attention</div>
+            <div style={{ fontSize: 12, color: "#ffffff80" }}>1 high-priority · 1 medium · 1 onboarding opportunity</div>
+          </div>
+          <Btn size="sm" style={{ background: DS.colors.accent, color: "#fff", border: "none", flexShrink: 0 }} onClick={() => onNav("aai")}>View Insights {I.arrow}</Btn>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr" : "2fr 1fr", gap: isMobile ? 12 : 24 }}>
+          <Card style={{ padding: 0 }}>
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Patient Progress</h3>
+              <button onClick={() => onNav("ap")} style={{ background: "none", border: "none", color: pc, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, display: "flex", alignItems: "center", gap: 4 }}>
+                View all {I.arrow}
+              </button>
+            </div>
+            {patients.map(p => {
+              const ptTasks = tasks[p.id] || [];
+              const done = ptTasks.filter(t => t.status === "completed").length;
+              const pct = ptTasks.length ? Math.round((done / ptTasks.length) * 100) : 0;
+              return (
+                <div key={p.id}
+                  onClick={() => handlePatientClick(p.id)}
+                  className="patient-row"
+                  style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 20px", borderBottom: `1px solid ${DS.colors.border}`, cursor: "pointer", background: DS.colors.white, transition: "background 0.12s" }}>
+                  <Avatar name={p.name} size={38} color={pc} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, color: DS.colors.ink }}>{p.name}</div>
+                    <div style={{ fontSize: 11.5, color: DS.colors.muted, marginBottom: 5 }}>{p.treatment}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, maxWidth: 160, height: 5, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden" }}>
+                        <div style={{ width: pct + "%", height: "100%", background: pct === 100 ? DS.colors.success : pc, borderRadius: DS.radius.full }} />
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: DS.colors.muted }}>{pct}%</span>
                     </div>
-                  ))}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Chip color={pct === 100 ? DS.colors.success : pct > 50 ? DS.colors.warning : DS.colors.muted} dot>
+                      {pct === 100 ? "Ready" : pct > 50 ? "In Progress" : "Needs Attention"}
+                    </Chip>
+                    <span style={{ color: DS.colors.muted, opacity: 0.4 }}>{I.arrow}</span>
+                  </div>
                 </div>
-                <Btn size="sm" variant={c.is_active ? "danger" : "secondary"} onClick={() => onToggle(c.id, c.is_active)}>
-                  {c.is_active ? "Deactivate" : "Reactivate"}
-                </Btn>
-              </Card>
-            );
-          })}
+              );
+            })}
+          </Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: isSmall ? 12 : 18 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Recent Activity</h3>
+              {[
+                { t: "Jordan Rivera completed intake form", time: "2h ago" },
+                { t: "Lab results uploaded by Jordan Rivera", time: "3h ago" },
+                { t: "AI sent consent reminder to Taylor Brooks", time: "1d ago" },
+                { t: "Morgan Ellis created account", time: "2d ago" },
+              ].map((a, i) => (
+                <div key={i} style={{ padding: "9px 0", borderBottom: i < 3 ? `1px solid ${DS.colors.border}` : "none" }}>
+                  <div style={{ fontSize: 12.5, color: DS.colors.ink }}>{a.t}</div>
+                  <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 1 }}>{a.time}</div>
+                </div>
+              ))}
+            </Card>
+            <Card>
+              <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Quick Actions</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <Btn variant="secondary" size="sm" style={{ justifyContent: "center" }} onClick={() => onNav("ap")}>{I.patients} View All Patients</Btn>
+                <Btn variant="secondary" size="sm" style={{ justifyContent: "center" }} onClick={() => onNav("arm")}>{I.bell} Send Reminder</Btn>
+                <Btn variant="ai" size="sm" style={{ justifyContent: "center" }} onClick={() => onNav("aai")}>{I.spark} Ask AI Assistant</Btn>
+              </div>
+            </Card>
+          </div>
         </div>
       </div>
-      <Modal open={showNew} onClose={() => setShowNew(false)} title="Provision New Clinic" width={440}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <Input label="Clinic Name" value={name} onChange={setName} placeholder="Scottsdale Regenerative Medicine" required />
-          <Input label="Admin Email" value={email} onChange={setEmail} type="email" placeholder="admin@clinic.com" required />
+    </div>
+  );
+}
+
+function AdminPatients({ onSelect, onInvite }) {
+  const { currentUser, tasks, setSelectedPatientId, primaryColor } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isSmall = isMobile || isTablet;
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const [search, setSearch] = useState("");
+  const filtered = patients.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase()));
+  const pad = isMobile ? "14px" : isTablet ? "20px 24px" : "28px 36px";
+
+  const handleClick = (id) => { setSelectedPatientId(id); onSelect(id); };
+
+  // Mobile/tablet: card layout
+  if (isSmall) {
+    return (
+      <div>
+        <PageHead title="Patients" subtitle={`${patients.length} patients`} actions={<Btn size="sm" onClick={() => onInvite()}>{I.user} Invite</Btn>} />
+        <div style={{ padding: pad }}>
+          <div style={{ marginBottom: 14 }}>
+            <Input value={search} onChange={setSearch} placeholder="Search by name or email…" />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filtered.map(p => {
+              const ptTasks = tasks[p.id] || [];
+              const done = ptTasks.filter(t => t.status === "completed").length;
+              const pct = ptTasks.length ? Math.round((done / ptTasks.length) * 100) : 0;
+              return (
+                <div key={p.id}
+                  onClick={() => handleClick(p.id)}
+                  className="patient-row"
+                  style={{ background: DS.colors.white, borderRadius: DS.radius.lg, border: `1px solid ${DS.colors.border}`, padding: "16px", cursor: "pointer", boxShadow: DS.shadow.sm, transition: "all 0.15s" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                    <Avatar name={p.name} size={42} color={primaryColor} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>{p.name}</div>
+                      <div style={{ fontSize: 12, color: DS.colors.muted }}>{p.treatment}</div>
+                      <div style={{ fontSize: 11.5, color: DS.colors.muted, marginTop: 1 }}>{p.email}</div>
+                    </div>
+                    <span style={{ color: primaryColor, opacity: 0.4 }}>{I.arrow}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1, height: 5, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden" }}>
+                      <div style={{ width: pct + "%", height: "100%", background: pct === 100 ? DS.colors.success : primaryColor, borderRadius: DS.radius.full }} />
+                    </div>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: DS.colors.muted, flexShrink: 0 }}>{pct}% done</span>
+                    <Chip color={pct === 100 ? DS.colors.success : pct > 0 ? DS.colors.warning : DS.colors.muted} dot size="sm">
+                      {pct === 100 ? "Ready" : pct > 0 ? "In Progress" : "Not Started"}
+                    </Chip>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: table layout — full row clickable
+  return (
+    <div>
+      <PageHead title="Patients" subtitle={`${patients.length} patients in your clinic`} actions={<Btn size="sm" onClick={() => onInvite()}>{I.user} Invite Patient</Btn>} />
+      <div style={{ padding: pad }}>
+        <div style={{ marginBottom: 18 }}>
+          <Input value={search} onChange={setSearch} placeholder="Search by name or email…" />
+        </div>
+        <Card style={{ padding: 0, overflow: "hidden" }}>
+          <div style={{ padding: "13px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1.5fr 80px", gap: 12, fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <span>Patient</span><span>Email</span><span>Joined</span><span>Progress</span><span>Status</span>
+          </div>
+          {filtered.map(p => {
+            const ptTasks = tasks[p.id] || [];
+            const done = ptTasks.filter(t => t.status === "completed").length;
+            const pct = ptTasks.length ? Math.round((done / ptTasks.length) * 100) : 0;
+            return (
+              <div key={p.id}
+                onClick={() => handleClick(p.id)}
+                className="patient-row"
+                style={{ padding: "15px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1.5fr 80px", gap: 12, alignItems: "center", cursor: "pointer", background: DS.colors.white, transition: "background 0.12s" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <Avatar name={p.name} size={34} color={primaryColor} />
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: DS.colors.ink, transition: "color 0.12s" }}>{p.name}</div>
+                    <div style={{ fontSize: 11, color: DS.colors.muted }}>{p.treatment}</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{p.email}</span>
+                <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{p.joined}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, height: 5, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden" }}>
+                    <div style={{ width: pct + "%", height: "100%", background: pct === 100 ? DS.colors.success : primaryColor, borderRadius: DS.radius.full }} />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: DS.colors.muted, flexShrink: 0 }}>{pct}%</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Chip color={pct === 100 ? DS.colors.success : pct > 0 ? DS.colors.warning : DS.colors.muted} dot size="sm">
+                    {pct === 100 ? "Ready" : pct > 0 ? "Active" : "New"}
+                  </Chip>
+                  <span style={{ color: primaryColor, opacity: 0.4 }}>{I.arrow}</span>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function AdminPatientDetail() {
+  const { selectedPatientId, tasks, notes, addNote, updateTask, primaryColor, addReminderLog, addUploadRequest, reminderLog, uploadRequests } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isSmall = isMobile || isTablet;
+
+  const patient = SEED.users.find(u => u.id === selectedPatientId) || SEED.users.find(u => u.role === "patient");
+  const ptTasks = tasks[patient?.id] || [];
+  const ptNotes = notes.filter(n => n.patient_id === patient?.id);
+  const ptReminders = (reminderLog || []).filter(r => r.patient_id === patient?.id);
+  const ptUploads = (uploadRequests || []).filter(r => r.patient_id === patient?.id);
+
+  const [newNote, setNewNote] = useState("");
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [reminderType, setReminderType] = useState("intake");
+  const [reminderChannel, setReminderChannel] = useState("Email");
+  const [reminderMsg, setReminderMsg] = useState("");
+  const [reminderSending, setReminderSending] = useState(false);
+  const [uploadLabel, setUploadLabel] = useState("");
+  const [uploadMsg, setUploadMsg] = useState("");
+  const [uploadDue, setUploadDue] = useState("");
+  const [uploadSending, setUploadSending] = useState(false);
+
+  if (!patient) return <div style={{ padding: 40, color: DS.colors.muted }}>Select a patient from the Patients page.</div>;
+
+  const firstName = patient.name.split(" ")[0];
+  const reminderTemplates = {
+    intake: `Hi ${firstName}, this is a friendly reminder to complete your intake form before your appointment. It only takes a few minutes. Please log in to your patient portal to complete it.`,
+    consent: `Hi ${firstName}, your consent form is still pending your signature. This must be completed before we can proceed with your treatment. Please log in to review and sign.`,
+    upload: `Hi ${firstName}, we are still waiting on some documents for your appointment. Please log in to your patient portal and upload the requested files.`,
+    appointment: `Hi ${firstName}, this is a reminder about your upcoming appointment. Please ensure all pre-visit tasks are completed beforehand.`,
+    followup: `Hi ${firstName}, we would love to hear how you are feeling after your recent treatment. Please log in and complete your follow-up check-in.`,
+  };
+
+  const handleReminderType = (type) => { setReminderType(type); setReminderMsg(reminderTemplates[type]); };
+  const openReminderModal = () => { setReminderMsg(reminderTemplates[reminderType]); setShowReminderModal(true); };
+
+  const sendReminder = async () => {
+    if (!reminderMsg.trim()) return;
+    setReminderSending(true);
+    await new Promise(r => setTimeout(r, 900));
+    addReminderLog(patient.id, { type: reminderType, channel: reminderChannel, message: reminderMsg });
+    setReminderSending(false);
+    setShowReminderModal(false);
+    setReminderMsg("");
+  };
+
+  const sendUploadRequest = async () => {
+    if (!uploadLabel.trim()) return;
+    setUploadSending(true);
+    await new Promise(r => setTimeout(r, 900));
+    addUploadRequest(patient.id, { label: uploadLabel, message: uploadMsg, dueDate: uploadDue });
+    setUploadSending(false);
+    setShowUploadModal(false);
+    setUploadLabel(""); setUploadMsg(""); setUploadDue("");
+  };
+
+  const done = ptTasks.filter(t => t.status === "completed").length;
+  const pct = ptTasks.length ? Math.round((done / ptTasks.length) * 100) : 0;
+  const pad = isMobile ? "14px" : isTablet ? "18px 20px" : "24px 36px";
+  const staffName = (sid) => SEED.users.find(u => u.id === sid)?.name || "Staff";
+
+  const CompletionRows = () => [["intake","Intake"],["consent","Consent"],["upload","Uploads"],["followup","Follow-Up"]].map(([type, label]) => {
+    const tt = ptTasks.filter(t => t.type === type);
+    const d = tt.filter(t => t.status === "completed").length;
+    return (
+      <div key={type} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${DS.colors.border}`, fontSize: 12.5 }}>
+        <span style={{ color: DS.colors.muted }}>{label}</span>
+        <Chip color={d === tt.length && tt.length > 0 ? DS.colors.success : DS.colors.warning}>{d}/{tt.length}</Chip>
+      </div>
+    );
+  });
+
+  return (
+    <div>
+      {/* Send Reminder Modal */}
+      <Modal open={showReminderModal} onClose={() => setShowReminderModal(false)} title="Send Reminder" subtitle={`Sending to ${patient.name}`} width={520}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 6 }}>Plan</label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Reminder Type</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {[["intake","Intake Form"],["consent","Consent"],["upload","File Upload"],["appointment","Appointment"],["followup","Follow-Up"]].map(([val, lbl]) => (
+                <button key={val} onClick={() => handleReminderType(val)}
+                  style={{ padding: "7px 13px", borderRadius: DS.radius.full, border: `1.5px solid ${reminderType === val ? primaryColor : DS.colors.border}`, background: reminderType === val ? primaryColor + "12" : DS.colors.white, color: reminderType === val ? primaryColor : DS.colors.muted, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Delivery Channel</label>
+            <div style={{ display: "flex", gap: 7 }}>
+              {["Email", "SMS", "Email + SMS"].map(ch => (
+                <button key={ch} onClick={() => setReminderChannel(ch)}
+                  style={{ padding: "7px 13px", borderRadius: DS.radius.full, border: `1.5px solid ${reminderChannel === ch ? primaryColor : DS.colors.border}`, background: reminderChannel === ch ? primaryColor + "12" : DS.colors.white, color: reminderChannel === ch ? primaryColor : DS.colors.muted, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                  {ch}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Textarea label="Message" value={reminderMsg} onChange={setReminderMsg} rows={5} placeholder="Type your reminder message..." />
+          <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 12.5, color: DS.colors.muted, border: `1px solid ${DS.colors.border}`, display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span style={{ color: primaryColor, flexShrink: 0, marginTop: 1 }}>{I.info}</span>
+            <span>Delivered via <strong style={{ color: DS.colors.ink }}>{reminderChannel}</strong> to <strong style={{ color: DS.colors.ink }}>{patient.email}</strong>{reminderChannel.includes("SMS") ? ` and ${patient.phone}` : ""}.</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowReminderModal(false)}>Cancel</Btn>
+            <Btn onClick={sendReminder} loading={reminderSending} disabled={!reminderMsg.trim()}>{I.bell} Send Reminder</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Request Upload Modal */}
+      <Modal open={showUploadModal} onClose={() => setShowUploadModal(false)} title="Request File Upload" subtitle={`From ${patient.name}`} width={500}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Common Requests</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {["Recent Lab Results", "MRI or Imaging", "Insurance Card", "Photo of Treatment Area", "Previous Medical Records"].map(opt => (
+                <button key={opt} onClick={() => setUploadLabel(opt)}
+                  style={{ padding: "6px 12px", borderRadius: DS.radius.full, border: `1.5px solid ${uploadLabel === opt ? primaryColor : DS.colors.border}`, background: uploadLabel === opt ? primaryColor + "12" : DS.colors.white, color: uploadLabel === opt ? primaryColor : DS.colors.muted, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Input label="Document Label" value={uploadLabel} onChange={setUploadLabel} placeholder="e.g. Recent Lab Results" required />
+          <Textarea label="Instructions for Patient (optional)" value={uploadMsg} onChange={setUploadMsg} rows={3} placeholder="e.g. Please upload bloodwork from the past 90 days." />
+          <Input label="Due By (optional)" value={uploadDue} onChange={setUploadDue} type="date" />
+          <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "10px 14px", fontSize: 12.5, color: DS.colors.muted, border: `1px solid ${DS.colors.border}`, display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span style={{ color: primaryColor, flexShrink: 0, marginTop: 1 }}>{I.info}</span>
+            <span>Creates a new upload task in <strong style={{ color: DS.colors.ink }}>{firstName}'s</strong> patient portal and sends an email notification.</span>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowUploadModal(false)}>Cancel</Btn>
+            <Btn onClick={sendUploadRequest} loading={uploadSending} disabled={!uploadLabel.trim()}>{I.upload} Send Request</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Patient Header */}
+      <div style={{ padding: isMobile ? "14px 16px" : "22px 36px", background: DS.colors.white, borderBottom: `1px solid ${DS.colors.border}` }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+          <Avatar name={patient.name} size={isMobile ? 42 : 50} color={primaryColor} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ margin: "0 0 3px", fontSize: isMobile ? 17 : 21, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.4px" }}>{patient.name}</h1>
+            <div style={{ fontSize: 13, color: DS.colors.muted }}>{patient.email}{!isMobile && ` · ${patient.phone}`}</div>
+            <div style={{ marginTop: 6, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Chip color={primaryColor}>{patient.treatment}</Chip>
+              <Chip color={DS.colors.success} dot>Active</Chip>
+            </div>
+          </div>
+          {!isMobile && (
             <div style={{ display: "flex", gap: 8 }}>
-              {[["starter", "Starter"], ["pro", "Growth"], ["enterprise", "Enterprise"]].map(([val, lbl]) => (
-                <button key={val} onClick={() => setPlan(val)} style={{ flex: 1, padding: "9px 6px", borderRadius: DS.radius.md, border: `1.5px solid ${plan === val ? DS.colors.primary : DS.colors.border}`, background: plan === val ? DS.colors.primaryLight : DS.colors.white, color: plan === val ? DS.colors.primary : DS.colors.ink, fontSize: 12, fontWeight: plan === val ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body }}>{lbl}</button>
+              <Btn size="sm" variant="secondary" onClick={openReminderModal}>{I.bell} Send Reminder</Btn>
+              <Btn size="sm" variant="secondary" onClick={() => setShowUploadModal(true)}>{I.upload} Request Upload</Btn>
+            </div>
+          )}
+        </div>
+        {isMobile && (
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <Btn size="sm" variant="secondary" style={{ flex: 1, justifyContent: "center" }} onClick={openReminderModal}>{I.bell} Remind</Btn>
+            <Btn size="sm" variant="secondary" style={{ flex: 1, justifyContent: "center" }} onClick={() => setShowUploadModal(true)}>{I.upload} Request</Btn>
+          </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: pad }}>
+        <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr" : "2fr 1fr", gap: isMobile ? 14 : 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 14 : 20 }}>
+            {isSmall && (
+              <Card>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Completion</h3>
+                  <span style={{ fontSize: 22, fontWeight: 800, color: primaryColor, letterSpacing: "-1px" }}>{pct}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden", marginBottom: 12 }}>
+                  <div style={{ width: pct + "%", height: "100%", background: pct === 100 ? DS.colors.success : primaryColor, borderRadius: DS.radius.full }} />
+                </div>
+                <CompletionRows />
+              </Card>
+            )}
+            <Card>
+              <h3 style={{ margin: "0 0 0", fontSize: 14, fontWeight: 700, paddingBottom: 12, borderBottom: `1px solid ${DS.colors.border}` }}>Task Status</h3>
+              {ptTasks.length === 0
+                ? <div style={{ padding: "24px 0", textAlign: "center", color: DS.colors.muted, fontSize: 13 }}>No tasks assigned yet.</div>
+                : ptTasks.map(t => <TaskRow key={t.id} task={t} onUpdate={(id, s) => updateTask(patient.id, id, s)} canUpdate />)}
+            </Card>
+            {ptUploads.length > 0 && (
+              <Card>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Upload Requests</h3>
+                {ptUploads.map(r => (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                    <div style={{ width: 32, height: 32, borderRadius: DS.radius.md, background: DS.colors.primaryLight, display: "flex", alignItems: "center", justifyContent: "center", color: primaryColor, flexShrink: 0 }}>{I.upload}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13.5, color: DS.colors.ink }}>{r.label}</div>
+                      {r.message && <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 1 }}>{r.message}</div>}
+                      <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 2 }}>{staffName(r.requested_by)} · {new Date(r.requested_at).toLocaleDateString()}{r.dueDate ? ` · Due ${r.dueDate}` : ""}</div>
+                    </div>
+                    <Chip color={r.status === "fulfilled" ? DS.colors.success : DS.colors.warning} dot>{r.status === "fulfilled" ? "Fulfilled" : "Pending"}</Chip>
+                  </div>
+                ))}
+              </Card>
+            )}
+            {ptReminders.length > 0 && (
+              <Card>
+                <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Reminder History</h3>
+                {ptReminders.map(r => (
+                  <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                    <div style={{ width: 32, height: 32, borderRadius: DS.radius.md, background: "#FEF3C7", display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.warning, flexShrink: 0 }}>{I.bell}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: DS.colors.ink, textTransform: "capitalize" }}>{r.type} Reminder</div>
+                      <div style={{ fontSize: 12, color: DS.colors.muted, marginTop: 1 }}>via {r.channel} · {staffName(r.sent_by)} · {new Date(r.sent_at).toLocaleDateString()}</div>
+                    </div>
+                    <Chip color={DS.colors.success} dot>Delivered</Chip>
+                  </div>
+                ))}
+              </Card>
+            )}
+            <Card>
+              <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Internal Notes</h3>
+              {ptNotes.length === 0 && <div style={{ fontSize: 13, color: DS.colors.muted, marginBottom: 14 }}>No notes yet.</div>}
+              {ptNotes.map(n => {
+                const author = SEED.users.find(u => u.id === n.staff_id);
+                return (
+                  <div key={n.id} style={{ display: "flex", gap: 10, padding: "11px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                    <Avatar name={author?.name} size={28} color={primaryColor} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, color: DS.colors.muted, marginBottom: 3 }}>{author?.name} · {new Date(n.created_at).toLocaleDateString()}</div>
+                      <div style={{ fontSize: 13.5, color: DS.colors.ink, lineHeight: 1.65 }}>{n.content}</div>
+                    </div>
+                  </div>
+                );
+              })}
+              <div style={{ marginTop: 14 }}>
+                <Textarea value={newNote} onChange={setNewNote} placeholder="Add an internal note visible only to staff..." rows={3} style={{ marginBottom: 10 }} />
+                <Btn size="sm" onClick={() => { if (newNote.trim()) { addNote(patient.id, newNote); setNewNote(""); } }}>{I.note} Add Note</Btn>
+              </div>
+            </Card>
+          </div>
+          {!isSmall && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Card>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700 }}>Completion</h3>
+                <div style={{ fontSize: 32, fontWeight: 800, color: primaryColor, letterSpacing: "-1.5px" }}>{pct}%</div>
+                <div style={{ height: 6, borderRadius: DS.radius.full, background: DS.colors.border, overflow: "hidden", margin: "10px 0 14px" }}>
+                  <div style={{ width: pct + "%", height: "100%", background: pct === 100 ? DS.colors.success : primaryColor, borderRadius: DS.radius.full }} />
+                </div>
+                <CompletionRows />
+              </Card>
+              <Card>
+                <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Patient Info</h3>
+                {[["Email", patient.email], ["Phone", patient.phone || "—"], ["DOB", patient.dob || "—"], ["Joined", patient.joined || "—"]].map(([l, v]) => (
+                  <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${DS.colors.border}`, fontSize: 12.5 }}>
+                    <span style={{ color: DS.colors.muted }}>{l}</span>
+                    <span style={{ fontWeight: 600, color: DS.colors.ink, maxWidth: 160, textAlign: "right", wordBreak: "break-all" }}>{v}</span>
+                  </div>
+                ))}
+              </Card>
+              <Card>
+                <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700 }}>Quick Actions</h3>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <Btn variant="secondary" style={{ justifyContent: "center" }} onClick={openReminderModal}>{I.bell} Send Reminder</Btn>
+                  <Btn variant="secondary" style={{ justifyContent: "center" }} onClick={() => setShowUploadModal(true)}>{I.upload} Request Upload</Btn>
+                </div>
+              </Card>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+function AdminAIPage() {
+  const { showToast } = useApp();
+  return (
+    <div>
+      <PageHead title="AI Assistant" subtitle="Powered by RegenFlow AI — clinic automation engine" eyebrow="AI Tools"
+        actions={<Chip color={DS.colors.success} dot size="sm">AI Active</Chip>} />
+      <div style={{ padding: "24px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 3fr", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>AI Insights</h3>
+              {SEED.aiInsights.map(insight => (
+                <div key={insight.id} style={{ padding: "13px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                    <Chip color={insight.severity === "high" ? DS.colors.danger : insight.severity === "medium" ? DS.colors.warning : DS.colors.muted} dot size="sm">{insight.severity}</Chip>
+                    <span style={{ fontSize: 11, color: DS.colors.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>{insight.type}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: DS.colors.ink, lineHeight: 1.6, marginBottom: 8 }}>{insight.message}</div>
+                  <Btn size="sm" variant="secondary" onClick={() => {
+                    const msgs = { "Send reminder": "Reminder sent to patient via Email + SMS", "Draft message": "Draft message opened in patient detail", "Trigger welcome": "Welcome sequence triggered for new patient" };
+                    showToast(msgs[insight.action] || "AI action triggered");
+                  }}>{I.zap} {insight.action}</Btn>
+                </div>
+              ))}
+            </Card>
+            <Card>
+              <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>AI Automation Status</h3>
+              {[
+                { label: "3-Day Consent Reminder", active: true },
+                { label: "Post-Visit Check-In Sequence", active: true },
+                { label: "Welcome Email Sequence", active: true },
+                { label: "No-Show Re-engagement", active: false },
+              ].map((a, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: `1px solid ${DS.colors.border}`, fontSize: 13 }}>
+                  <span style={{ color: DS.colors.ink }}>{a.label}</span>
+                  <Chip color={a.active ? DS.colors.success : DS.colors.muted} dot>{a.active ? "Active" : "Off"}</Chip>
+                </div>
+              ))}
+            </Card>
+          </div>
+          <Card style={{ padding: 0, overflow: "hidden" }}>
+            <AIAssistant standalone />
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminForms() {
+  const { showToast } = useApp();
+  const [preview, setPreview] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [newTemplate, setNewTemplate] = useState(false);
+  const [ntTitle, setNtTitle] = useState("");
+  const [ntDesc, setNtDesc] = useState("");
+  const [forms, setForms] = useState(SEED.intakeForms);
+
+  const saveEdit = () => {
+    setForms(prev => prev.map(f => f.id === editing.id ? { ...f, title: editTitle, description: editDesc } : f));
+    setEditing(null);
+    showToast("Form template updated");
+  };
+
+  return (
+    <div>
+      <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.title || ""} subtitle={`${preview?.fields?.length} fields · Preview mode`} width={600}>
+        {preview && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <p style={{ fontSize: 13.5, color: DS.colors.muted, margin: 0 }}>{preview.description}</p>
+            {preview.fields.map(f => (
+              <div key={f.id}>
+                {f.type === "textarea"
+                  ? <Textarea label={f.label} value="" onChange={() => {}} required={f.required} />
+                  : f.type === "radio"
+                  ? <div><label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em" }}>{f.label}{f.required && " *"}</label><div style={{ display: "flex", gap: 16, marginTop: 8 }}>{f.options.map(o => <label key={o} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14, cursor: "pointer" }}><input type="radio" name={f.id} disabled /> {o}</label>)}</div></div>
+                  : <Input label={f.label} value="" onChange={() => {}} type={f.type} required={f.required} />}
+              </div>
+            ))}
+            <div style={{ paddingTop: 8, borderTop: `1px solid ${DS.colors.border}` }}>
+              <Btn disabled>Submit Form (Preview)</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Form Template" width={480}>
+        {editing && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <Input label="Form Title" value={editTitle} onChange={setEditTitle} required />
+            <Textarea label="Description" value={editDesc} onChange={setEditDesc} rows={3} />
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "12px 14px", fontSize: 12.5, color: DS.colors.muted, border: `1px solid ${DS.colors.border}` }}>
+              Field editing is available in the full form builder. This saves the title and description.
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+              <Btn onClick={saveEdit}>Save Changes</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={newTemplate} onClose={() => setNewTemplate(false)} title="New Form Template" width={480}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <Input label="Template Name" value={ntTitle} onChange={setNtTitle} placeholder="e.g. Post-Treatment Questionnaire" required />
+          <Textarea label="Description" value={ntDesc} onChange={setNtDesc} placeholder="Describe when this form should be used..." rows={3} />
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setNewTemplate(false)}>Cancel</Btn>
+            <Btn onClick={() => {
+              if (!ntTitle.trim()) { showToast("Please enter a template name", "error"); return; }
+              setForms(prev => [...prev, { id: "form_" + Date.now(), clinic_id: "clinic_1", title: ntTitle, description: ntDesc, fields: [] }]);
+              setNtTitle(""); setNtDesc("");
+              setNewTemplate(false);
+              showToast("New form template created");
+            }}>Create Template</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <PageHead title="Form Templates" subtitle="Manage intake and questionnaire templates"
+        actions={<Btn size="sm" onClick={() => setNewTemplate(true)}>{I.forms} New Template</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        {forms.map(f => (
+          <Card key={f.id} style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink, marginBottom: 4 }}>{f.title}</div>
+                <div style={{ fontSize: 13, color: DS.colors.muted, marginBottom: 8 }}>{f.description}</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Chip color={DS.colors.success} dot>Active</Chip>
+                  <Chip color={DS.colors.muted}>{f.fields.length} fields</Chip>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn size="sm" variant="secondary" onClick={() => { setEditing(f); setEditTitle(f.title); setEditDesc(f.description); }}>Edit</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => setPreview(f)}>Preview</Btn>
+              </div>
+            </div>
+          </Card>
+        ))}
+        {forms.length === 0 && <div style={{ textAlign: "center", padding: 40, color: DS.colors.muted }}>No form templates yet. Create your first one.</div>}
+      </div>
+    </div>
+  );
+}
+function AdminConsents() {
+  const { currentUser, primaryColor, tasks } = useApp();
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const [viewConsent, setViewConsent] = useState(null);
+
+  // Build real consent data per patient from tasks
+  const consentData = patients.map(p => {
+    const ptTasks = tasks[p.id] || [];
+    const consentTask = ptTasks.find(t => t.type === "consent");
+    const consentForm = SEED.consentForms.find(c => c.clinic_id === p.clinic_id);
+    return {
+      patient: p,
+      consentTitle: (() => {
+        const tl = (p.treatment || "").toLowerCase();
+        if (tl.includes("stem")) return SEED.consentForms.find(c => c.id === "consent_2")?.title || "Stem Cell Therapy Consent";
+        if (tl.includes("prp")) return SEED.consentForms.find(c => c.id === "consent_1")?.title || "PRP Therapy Consent";
+        return SEED.consentForms.find(c => c.id === "consent_3")?.title || "General Treatment Consent";
+      })(),
+      status: consentTask?.status === "completed" ? "signed" : consentTask?.status === "in_progress" ? "pending" : "not_started",
+      date: consentTask?.completed_at ? new Date(consentTask.completed_at).toLocaleDateString() : null,
+      content: consentForm?.content || "",
+    };
+  });
+
+  const statusColor = s => s === "signed" ? DS.colors.success : s === "pending" ? DS.colors.warning : DS.colors.muted;
+  const statusLabel = s => s === "signed" ? "Signed" : s === "pending" ? "Awaiting Signature" : "Not Started";
+
+  return (
+    <div>
+      <Modal open={!!viewConsent} onClose={() => setViewConsent(null)}
+        title={viewConsent?.consentTitle || "Consent"}
+        subtitle={viewConsent ? `${viewConsent.patient.name} · ${statusLabel(viewConsent.status)}` : ""}
+        width={580}>
+        {viewConsent && (
+          <div>
+            {viewConsent.status === "signed" && (
+              <div style={{ background: DS.colors.primaryLight, borderRadius: DS.radius.md, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ color: DS.colors.success }}>{I.check}</span>
+                <span style={{ fontSize: 13.5, color: DS.colors.primary, fontWeight: 600 }}>
+                  Signed by {viewConsent.patient.name} on {viewConsent.date}
+                </span>
+              </div>
+            )}
+            {viewConsent.status !== "signed" && (
+              <div style={{ background: "#FEF3C7", borderRadius: DS.radius.md, padding: "12px 16px", marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
+                <span style={{ color: DS.colors.warning }}>{I.info}</span>
+                <span style={{ fontSize: 13.5, color: "#92400E", fontWeight: 500 }}>
+                  Consent pending — patient has not signed yet.
+                </span>
+              </div>
+            )}
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: 16, fontSize: 13, lineHeight: 1.8, color: "#374151", whiteSpace: "pre-wrap", border: `1px solid ${DS.colors.border}`, maxHeight: 320, overflowY: "auto" }}>
+              {viewConsent.content || "Consent document content not available."}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <PageHead title="Consent Records" subtitle="View all patient consent documents" />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
+          <StatCard label="Signed" value={consentData.filter(c => c.status === "signed").length} icon={I.shield} color={DS.colors.success} />
+          <StatCard label="Pending" value={consentData.filter(c => c.status === "pending").length} icon={I.bell} color={DS.colors.warning} />
+          <StatCard label="Not Started" value={consentData.filter(c => c.status === "not_started").length} icon={I.info} color={DS.colors.muted} />
+        </div>
+        <Card style={{ padding: 0 }}>
+          <div style={{ padding: "12px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 80px", gap: 12, fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <span>Patient</span><span>Consent Document</span><span>Status</span><span>Signed Date</span><span></span>
+          </div>
+          {consentData.map(({ patient: p, consentTitle, status, date }) => (
+            <div key={p.id} style={{ padding: "13px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 80px", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Avatar name={p.name} size={30} color={primaryColor} />
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.name}</div>
+                  <div style={{ fontSize: 11, color: DS.colors.muted }}>{p.treatment}</div>
+                </div>
+              </div>
+              <span style={{ fontSize: 13, color: DS.colors.muted }}>{consentTitle}</span>
+              <Chip color={statusColor(status)} dot>{statusLabel(status)}</Chip>
+              <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{date || "—"}</span>
+              <Btn size="sm" variant="secondary" onClick={() => {
+                const tl = (p.treatment || "").toLowerCase();
+                const cf = tl.includes("stem") ? SEED.consentForms.find(c => c.id === "consent_2") :
+                           tl.includes("prp") ? SEED.consentForms.find(c => c.id === "consent_1") :
+                           SEED.consentForms.find(c => c.id === "consent_3");
+                setViewConsent({ patient: p, consentTitle, status, date, content: cf?.content || "" });
+              }}>View</Btn>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+function AdminUploads() {
+  const { showToast, primaryColor } = useApp();
+  const [uploads, setUploads] = useState([
+    { id: "u1", patient: "Jordan Rivera", patient_id: "pat_1", file: "Lab_Results_2024.pdf", size: "244 KB", date: "Jan 8, 2025", status: "reviewed", type: "pdf" },
+    { id: "u2", patient: "Jordan Rivera", patient_id: "pat_1", file: "Insurance_Card.jpg", size: "128 KB", date: "Jan 9, 2025", status: "pending", type: "image" },
+    { id: "u3", patient: "Taylor Brooks", patient_id: "pat_2", file: "MRI_Scan.pdf", size: "1.2 MB", date: "Dec 22, 2024", status: "pending", type: "pdf" },
+  ]);
+  const [viewing, setViewing] = useState(null);
+  const [filter, setFilter] = useState("all");
+
+  const markReviewed = (id) => {
+    setUploads(prev => prev.map(u => u.id === id ? { ...u, status: "reviewed" } : u));
+    showToast("File marked as reviewed");
+  };
+
+  const filtered = filter === "all" ? uploads : uploads.filter(u => u.status === filter);
+
+  return (
+    <div>
+      <Modal open={!!viewing} onClose={() => setViewing(null)}
+        title={viewing?.file || "File Preview"}
+        subtitle={`From ${viewing?.patient} · ${viewing?.size} · Uploaded ${viewing?.date}`}
+        width={520}>
+        {viewing && (
+          <div>
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "40px 20px", textAlign: "center", border: `1px solid ${DS.colors.border}`, marginBottom: 16 }}>
+              <div style={{ fontSize: 56, marginBottom: 12 }}>{viewing.type === "pdf" ? "📄" : "🖼️"}</div>
+              <div style={{ fontWeight: 600, fontSize: 15, color: DS.colors.ink }}>{viewing.file}</div>
+              <div style={{ fontSize: 13, color: DS.colors.muted, marginTop: 4 }}>{viewing.size}</div>
+              <div style={{ marginTop: 16, fontSize: 12, color: DS.colors.muted, background: DS.colors.white, borderRadius: DS.radius.md, padding: "10px 14px", border: `1px solid ${DS.colors.border}` }}>
+                File preview is available in the full production environment with secure storage integration.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {viewing.status === "pending" && (
+                <Btn onClick={() => { markReviewed(viewing.id); setViewing(null); }}>{I.check} Mark as Reviewed</Btn>
+              )}
+              {viewing.status === "reviewed" && <Chip color={DS.colors.success} dot>Already Reviewed</Chip>}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <PageHead title="Uploaded Files" subtitle="Review patient-submitted documents and photos" />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+          {[["all", "All Files"], ["pending", "Pending Review"], ["reviewed", "Reviewed"]].map(([val, lbl]) => (
+            <button key={val} onClick={() => setFilter(val)}
+              style={{ padding: "7px 16px", borderRadius: DS.radius.full, border: `1.5px solid ${filter === val ? DS.colors.primary : DS.colors.border}`, background: filter === val ? DS.colors.primaryLight : DS.colors.white, color: filter === val ? DS.colors.primary : DS.colors.muted, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+              {lbl}
+              <span style={{ marginLeft: 6, background: filter === val ? DS.colors.primary : DS.colors.border, color: filter === val ? "#fff" : DS.colors.muted, borderRadius: DS.radius.full, padding: "1px 7px", fontSize: 11 }}>
+                {val === "all" ? uploads.length : uploads.filter(u => u.status === val).length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <Card>
+          {filtered.length === 0 && <div style={{ padding: "32px", textAlign: "center", color: DS.colors.muted }}>No files match this filter.</div>}
+          {filtered.map(u => (
+            <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+              <div style={{ width: 40, height: 40, borderRadius: DS.radius.md, background: DS.colors.surface, border: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>
+                {u.type === "pdf" ? "📄" : "🖼️"}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: DS.colors.ink }}>{u.file}</div>
+                <div style={{ fontSize: 12, color: DS.colors.muted }}>From {u.patient} · {u.size} · {u.date}</div>
+              </div>
+              <Chip color={u.status === "reviewed" ? DS.colors.success : DS.colors.warning} dot>
+                {u.status === "reviewed" ? "Reviewed" : "Pending Review"}
+              </Chip>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn size="sm" variant="secondary" onClick={() => setViewing(u)}>View</Btn>
+                {u.status === "pending" && (
+                  <Btn size="sm" variant="primary" onClick={() => markReviewed(u.id)}>{I.check} Review</Btn>
+                )}
+              </div>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+function AdminFollowUp() {
+  const { currentUser, showToast, primaryColor } = useApp();
+  const [items, setItems] = useState([
+    { id: "fq1", patient: "Jordan Rivera", patient_id: "pat_1", form: "48-Hour Post-Treatment Check-In", sent: "Jan 22, 2025", status: "pending", response: null },
+    { id: "fq2", patient: "Taylor Brooks", patient_id: "pat_2", form: "1-Week Follow-Up Survey", sent: "Dec 28, 2024", status: "completed", response: { pain: "3", swelling: "No swelling", notes: "Feeling much better. Mild soreness around injection site but manageable." } },
+  ]);
+  const [showSend, setShowSend] = useState(false);
+  const [sendPatient, setSendPatient] = useState("");
+  const [sendForm, setSendForm] = useState("48-Hour Post-Treatment Check-In");
+  const [viewResponse, setViewResponse] = useState(null);
+  const [sending, setSending] = useState(false);
+
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const pending = items.filter(i => i.status === "pending").length;
+  const completed = items.filter(i => i.status === "completed").length;
+
+  const doSend = async () => {
+    if (!sendPatient || !sendForm) { showToast("Select a patient and form", "error"); return; }
+    setSending(true);
+    await new Promise(r => setTimeout(r, 800));
+    const p = patients.find(p => p.id === sendPatient);
+    setItems(prev => [{ id: "fq_" + Date.now(), patient: p?.name || "", patient_id: sendPatient, form: sendForm, sent: new Date().toLocaleDateString(), status: "pending", response: null }, ...prev]);
+    setSending(false);
+    setShowSend(false);
+    setSendPatient(""); setSendForm("48-Hour Post-Treatment Check-In");
+    showToast(`Follow-up questionnaire sent to ${p?.name}`);
+  };
+
+  return (
+    <div>
+      <Modal open={showSend} onClose={() => setShowSend(false)} title="Send Follow-Up Questionnaire" width={480}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Patient</label>
+            <select value={sendPatient} onChange={e => setSendPatient(e.target.value)}
+              style={{ width: "100%", border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "11px 14px", fontSize: 14, color: DS.colors.ink, fontFamily: DS.fonts.body, background: DS.colors.surface }}>
+              <option value="">Select a patient...</option>
+              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Questionnaire</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {["48-Hour Post-Treatment Check-In", "1-Week Follow-Up Survey", "30-Day Progress Check", "Custom Questionnaire"].map(f => (
+                <button key={f} onClick={() => setSendForm(f)}
+                  style={{ padding: "10px 14px", borderRadius: DS.radius.md, border: `1.5px solid ${sendForm === f ? DS.colors.primary : DS.colors.border}`, background: sendForm === f ? DS.colors.primaryLight : DS.colors.white, color: sendForm === f ? DS.colors.primary : DS.colors.ink, fontSize: 13.5, fontWeight: sendForm === f ? 600 : 400, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "left", transition: "all 0.12s" }}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowSend(false)}>Cancel</Btn>
+            <Btn onClick={doSend} loading={sending} disabled={!sendPatient}>{I.refresh} Send Questionnaire</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!viewResponse} onClose={() => setViewResponse(null)}
+        title="Follow-Up Response"
+        subtitle={viewResponse ? `${viewResponse.patient} · ${viewResponse.form}` : ""}
+        width={480}>
+        {viewResponse?.response && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "14px 16px", border: `1px solid ${DS.colors.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Pain Level</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: DS.colors.primary }}>{viewResponse.response.pain}/10</div>
+            </div>
+            <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "14px 16px", border: `1px solid ${DS.colors.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Swelling</div>
+              <div style={{ fontSize: 14, color: DS.colors.ink }}>{viewResponse.response.swelling}</div>
+            </div>
+            {viewResponse.response.notes && (
+              <div style={{ background: DS.colors.surface, borderRadius: DS.radius.md, padding: "14px 16px", border: `1px solid ${DS.colors.border}` }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>Patient Notes</div>
+                <div style={{ fontSize: 14, color: DS.colors.ink, lineHeight: 1.65 }}>{viewResponse.response.notes}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <PageHead title="Follow-Up Queue" subtitle="Post-treatment questionnaires and check-ins"
+        actions={<Btn size="sm" onClick={() => setShowSend(true)}>{I.refresh} Send Follow-Up</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 24 }}>
+          <StatCard label="Awaiting Response" value={pending} icon={I.refresh} color={DS.colors.warning} />
+          <StatCard label="Responses Received" value={completed} icon={I.check} color={DS.colors.success} />
+          <StatCard label="Overdue" value="0" icon={I.bell} color={DS.colors.danger} />
+        </div>
+        <Card>
+          {items.length === 0 && <div style={{ padding: 32, textAlign: "center", color: DS.colors.muted }}>No follow-up questionnaires sent yet.</div>}
+          {items.map((f, i) => (
+            <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: i < items.length - 1 ? `1px solid ${DS.colors.border}` : "none" }}>
+              <Avatar name={f.patient} size={34} color={primaryColor} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, color: DS.colors.ink }}>{f.patient}</div>
+                <div style={{ fontSize: 12.5, color: DS.colors.muted }}>{f.form} · Sent {f.sent}</div>
+              </div>
+              <Chip color={f.status === "completed" ? DS.colors.success : DS.colors.warning} dot>
+                {f.status === "completed" ? "Response Received" : "Awaiting Response"}
+              </Chip>
+              {f.status === "completed" && f.response && (
+                <Btn size="sm" variant="secondary" onClick={() => setViewResponse(f)}>View Response</Btn>
+              )}
+              {f.status === "pending" && (
+                <Btn size="sm" variant="ghost" onClick={() => showToast(`Reminder sent to ${f.patient}`)}>Nudge</Btn>
+              )}
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+function AdminReminders() {
+  const { currentUser, showToast, primaryColor, reminderLog, addReminderLog } = useApp();
+  const [showSend, setShowSend] = useState(false);
+  const [sendPatient, setSendPatient] = useState("all");
+  const [sendType, setSendType] = useState("intake");
+  const [sendChannel, setSendChannel] = useState("Email");
+  const [sending, setSending] = useState(false);
+  const [automations, setAutomations] = useState([
+    { id: "a1", label: "3-Day Consent Reminder", trigger: "When consent unsigned > 24h", channel: "Email", active: true },
+    { id: "a2", label: "Intake Form Reminder", trigger: "3 days before appointment", channel: "Email + SMS", active: true },
+    { id: "a3", label: "Post-Visit Check-In", trigger: "48h after appointment", channel: "Email + SMS", active: true },
+    { id: "a4", label: "No-Show Re-engagement", trigger: "24h after missed appointment", channel: "SMS", active: false },
+  ]);
+
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const clinicLog = (reminderLog || []).filter(r => {
+    const pt = SEED.users.find(u => u.id === r.patient_id);
+    return pt?.clinic_id === currentUser.clinic_id;
+  });
+
+  const patientName = (pid) => SEED.users.find(u => u.id === pid)?.name || pid;
+
+  const doSend = async () => {
+    setSending(true);
+    await new Promise(r => setTimeout(r, 900));
+    const targets = sendPatient === "all" ? patients : patients.filter(p => p.id === sendPatient);
+    targets.forEach(p => {
+      addReminderLog(p.id, { type: sendType, channel: sendChannel, message: `${sendType.charAt(0).toUpperCase() + sendType.slice(1)} reminder sent via ${sendChannel}.` });
+    });
+    setSending(false);
+    setShowSend(false);
+    showToast(`Reminder sent to ${targets.length} patient${targets.length !== 1 ? "s" : ""}`);
+  };
+
+  const toggleAutomation = (id) => {
+    setAutomations(prev => prev.map(a => a.id === id ? { ...a, active: !a.active } : a));
+    const a = automations.find(x => x.id === id);
+    showToast(`${a?.label} ${a?.active ? "disabled" : "enabled"}`);
+  };
+
+  return (
+    <div>
+      <Modal open={showSend} onClose={() => setShowSend(false)} title="Send Reminder" subtitle="Send to one or all patients" width={480}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Patient</label>
+            <select value={sendPatient} onChange={e => setSendPatient(e.target.value)}
+              style={{ width: "100%", border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "11px 14px", fontSize: 14, color: DS.colors.ink, fontFamily: DS.fonts.body, background: DS.colors.surface }}>
+              <option value="all">All Patients ({patients.length})</option>
+              {patients.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Reminder Type</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {[["intake","Intake Form"],["consent","Consent"],["upload","File Upload"],["appointment","Appointment"],["followup","Follow-Up"]].map(([val, lbl]) => (
+                <button key={val} onClick={() => setSendType(val)}
+                  style={{ padding: "7px 13px", borderRadius: DS.radius.full, border: `1.5px solid ${sendType === val ? DS.colors.primary : DS.colors.border}`, background: sendType === val ? DS.colors.primaryLight : DS.colors.white, color: sendType === val ? DS.colors.primary : DS.colors.muted, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Channel</label>
+            <div style={{ display: "flex", gap: 7 }}>
+              {["Email", "SMS", "Email + SMS"].map(ch => (
+                <button key={ch} onClick={() => setSendChannel(ch)}
+                  style={{ padding: "7px 13px", borderRadius: DS.radius.full, border: `1.5px solid ${sendChannel === ch ? DS.colors.primary : DS.colors.border}`, background: sendChannel === ch ? DS.colors.primaryLight : DS.colors.white, color: sendChannel === ch ? DS.colors.primary : DS.colors.muted, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                  {ch}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowSend(false)}>Cancel</Btn>
+            <Btn onClick={doSend} loading={sending}>{I.bell} Send Reminder</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <PageHead title="Reminders" subtitle="Manage automated and manual reminder campaigns"
+        actions={<Btn size="sm" onClick={() => setShowSend(true)}>{I.bell} Send Reminder</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Automation Rules</h3>
+              {automations.map(a => (
+                <div key={a.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13.5, color: DS.colors.ink }}>{a.label}</span>
+                      {a.active && <Chip color={DS.colors.primary} size="sm">{I.spark} AI</Chip>}
+                    </div>
+                    <div style={{ fontSize: 12, color: DS.colors.muted }}>{a.trigger} · {a.channel}</div>
+                  </div>
+                  <button onClick={() => toggleAutomation(a.id)}
+                    style={{ width: 42, height: 24, borderRadius: DS.radius.full, background: a.active ? DS.colors.primary : DS.colors.border, border: "none", cursor: "pointer", position: "relative", transition: "background 0.2s", flexShrink: 0 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 3, left: a.active ? 21 : 3, transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }} />
+                  </button>
+                </div>
+              ))}
+            </Card>
+          </div>
+          <Card>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Reminder Log</h3>
+            {clinicLog.length === 0 && (
+              <div style={{ textAlign: "center", padding: "24px 0", color: DS.colors.muted, fontSize: 13 }}>No reminders sent yet.</div>
+            )}
+            {clinicLog.slice(0, 8).map((r, i) => (
+              <div key={r.id} style={{ padding: "10px 0", borderBottom: i < Math.min(clinicLog.length, 8) - 1 ? `1px solid ${DS.colors.border}` : "none" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: DS.colors.ink, textTransform: "capitalize" }}>{patientName(r.patient_id)} · {r.type} Reminder</div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, alignItems: "center" }}>
+                  <span style={{ fontSize: 11.5, color: DS.colors.muted }}>via {r.channel} · {new Date(r.sent_at).toLocaleDateString()}</span>
+                  <Chip color={DS.colors.success} dot size="sm">Delivered</Chip>
+                </div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+function AdminBranding() {
+  const { clinic, showToast } = useApp();
+  const [color, setColor] = useState(clinic?.primary_color || DS.colors.primary);
+  const [name, setName] = useState(clinic?.clinic_name || "");
+  const [tagline, setTagline] = useState(clinic?.tagline || "");
+  const [email, setEmail] = useState(clinic?.contact_email || "");
+  const [phone, setPhone] = useState(clinic?.contact_phone || "");
+  return (
+    <div>
+      <PageHead title="Branding Settings" subtitle="Customize your clinic's patient portal" actions={<Btn size="sm" onClick={() => showToast("Branding saved!")}>Save Changes</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <Card>
+              <h3 style={{ margin: "0 0 18px", fontSize: 14, fontWeight: 700 }}>Clinic Identity</h3>
+              <Input label="Clinic Name" value={name} onChange={setName} style={{ marginBottom: 14 }} />
+              <Input label="Portal Tagline" value={tagline} onChange={setTagline} style={{ marginBottom: 14 }} />
+              <Input label="Support Email" value={email} onChange={setEmail} type="email" style={{ marginBottom: 14 }} />
+              <Input label="Support Phone" value={phone} onChange={setPhone} />
+            </Card>
+            <Card>
+              <h3 style={{ margin: "0 0 18px", fontSize: 14, fontWeight: 700 }}>Brand Colors</h3>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 10 }}>Primary Color</label>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 50, height: 50, borderRadius: DS.radius.md, border: `1.5px solid ${DS.colors.border}`, cursor: "pointer" }} />
+                  <Input value={color} onChange={setColor} placeholder="#1C4532" style={{ flex: 1 }} />
+                </div>
+              </div>
+            </Card>
+          </div>
+          <Card>
+            <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Portal Preview</h3>
+            <div style={{ border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, overflow: "hidden" }}>
+              <div style={{ background: color, padding: "16px 20px" }}>
+                <div style={{ fontWeight: 800, fontSize: 16, color: "#fff" }}>{name}</div>
+                <div style={{ fontSize: 12, color: "#ffffff80", marginTop: 2 }}>{tagline}</div>
+              </div>
+              <div style={{ background: color + "10", padding: "16px 20px" }}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: DS.colors.ink, marginBottom: 10 }}>Welcome back, Jordan</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ background: color, color: "#fff", padding: "7px 14px", borderRadius: DS.radius.md, fontSize: 12, fontWeight: 600 }}>My Tasks</div>
+                  <div style={{ background: "#fff", border: `1.5px solid ${DS.colors.border}`, color: DS.colors.muted, padding: "7px 14px", borderRadius: DS.radius.md, fontSize: 12, fontWeight: 600 }}>Upload Files</div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminStaff() {
+  const { currentUser, showToast, primaryColor } = useApp();
+  const [staffList, setStaffList] = useState(
+    SEED.users.filter(u => u.clinic_id === currentUser.clinic_id && u.role !== "patient")
+  );
+  const [editing, setEditing] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteTitle, setInviteTitle] = useState("");
+  const [inviteRole, setInviteRole] = useState("clinic_staff");
+  const [inviting, setInviting] = useState(false);
+
+  const saveEdit = () => {
+    setStaffList(prev => prev.map(u => u.id === editing.id ? { ...u, name: editName, title: editTitle, role: editRole } : u));
+    setEditing(null);
+    showToast("Staff member updated");
+  };
+
+  const doInvite = async () => {
+    if (!inviteName.trim() || !inviteEmail.trim()) { showToast("Name and email are required", "error"); return; }
+    setInviting(true);
+    await new Promise(r => setTimeout(r, 700));
+    const newUser = { id: "usr_" + Date.now(), name: inviteName, email: inviteEmail, title: inviteTitle, role: inviteRole, clinic_id: currentUser.clinic_id };
+    setStaffList(prev => [...prev, newUser]);
+    setInviting(false);
+    setShowInvite(false);
+    setInviteName(""); setInviteEmail(""); setInviteTitle(""); setInviteRole("clinic_staff");
+    showToast(`Invite sent to ${inviteName}`);
+  };
+
+  return (
+    <div>
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit Staff Member" width={440}>
+        {editing && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <Input label="Full Name" value={editName} onChange={setEditName} required />
+            <Input label="Title / Role Description" value={editTitle} onChange={setEditTitle} placeholder="e.g. Care Coordinator" />
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Permission Level</label>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[["clinic_staff", "Staff"], ["clinic_admin", "Admin"]].map(([val, lbl]) => (
+                  <button key={val} onClick={() => setEditRole(val)}
+                    style={{ flex: 1, padding: "10px", borderRadius: DS.radius.md, border: `1.5px solid ${editRole === val ? DS.colors.primary : DS.colors.border}`, background: editRole === val ? DS.colors.primaryLight : DS.colors.white, color: editRole === val ? DS.colors.primary : DS.colors.ink, fontSize: 13.5, fontWeight: editRole === val ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s" }}>
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", paddingTop: 4 }}>
+              <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+              <Btn onClick={saveEdit}>Save Changes</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={showInvite} onClose={() => setShowInvite(false)} title="Invite Staff Member" subtitle="They will receive an email invite to join your clinic" width={460}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Input label="Full Name" value={inviteName} onChange={setInviteName} placeholder="Dr. Jane Smith" required />
+          <Input label="Email Address" value={inviteEmail} onChange={setInviteEmail} type="email" placeholder="jane@clinic.com" required />
+          <Input label="Title" value={inviteTitle} onChange={setInviteTitle} placeholder="e.g. Front Desk, Care Coordinator" />
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Permission Level</label>
+            <div style={{ display: "flex", gap: 10 }}>
+              {[["clinic_staff", "Staff — View & manage patients"], ["clinic_admin", "Admin — Full clinic access"]].map(([val, lbl]) => (
+                <button key={val} onClick={() => setInviteRole(val)}
+                  style={{ flex: 1, padding: "12px", borderRadius: DS.radius.md, border: `1.5px solid ${inviteRole === val ? DS.colors.primary : DS.colors.border}`, background: inviteRole === val ? DS.colors.primaryLight : DS.colors.white, color: inviteRole === val ? DS.colors.primary : DS.colors.ink, fontSize: 12.5, fontWeight: inviteRole === val ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.12s", textAlign: "left" }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setShowInvite(false)}>Cancel</Btn>
+            <Btn onClick={doInvite} loading={inviting}>{I.user} Send Invite</Btn>
+          </div>
+        </div>
+      </Modal>
+
+      <PageHead title="Staff Users" subtitle="Manage your clinic team"
+        actions={<Btn size="sm" onClick={() => setShowInvite(true)}>{I.user} Invite Staff</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <Card style={{ padding: 0 }}>
+          <div style={{ padding: "12px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 80px", gap: 12, fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <span>Name</span><span>Email</span><span>Title</span><span>Role</span><span></span>
+          </div>
+          {staffList.map(u => (
+            <div key={u.id} style={{ padding: "14px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 80px", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Avatar name={u.name} size={30} color={primaryColor} />
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{u.name}</div>
+                </div>
+              </div>
+              <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{u.email}</span>
+              <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{u.title || "—"}</span>
+              <Chip color={u.role === "clinic_admin" ? DS.colors.purple : DS.colors.blue}>
+                {u.role === "clinic_admin" ? "Admin" : "Staff"}
+              </Chip>
+              <Btn size="sm" variant="secondary" onClick={() => { setEditing(u); setEditName(u.name); setEditTitle(u.title || ""); setEditRole(u.role); }}>Edit</Btn>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────
+// SUPER ADMIN
+// ─────────────────────────────────────────────────────────
+function SuperAdminPortal() {
+  const { currentUser, logout } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isCollapsed = isMobile || isTablet;
+  const [active, setActive] = useState("sad");
+  const pc = "#B45309";
+  const nav = [
+    { key: "sad", label: "Platform Overview", icon: I.home },
+    { key: "sac", label: "All Clinics", icon: I.clinic },
+    { key: "sau", label: "All Users", icon: I.patients },
+    { key: "sam", label: "Market Analysis", icon: I.chart },
+  ];
+  const pages = { sad: <SuperDash />, sac: <SuperClinics />, sau: <SuperUsers />, sam: <MarketPage /> };
+  return (
+    <div style={{ display: "flex", minHeight: "100vh", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <Sidebar items={nav} active={active} onSelect={setActive} user={currentUser} clinic={null} onLogout={logout} primaryColor={pc} />
+      <div style={{ marginLeft: isCollapsed ? 0 : 232, flex: 1, paddingTop: isCollapsed ? 56 : 0 }}>
+        {pages[active] || <SuperDash />}
+      </div>
+    </div>
+  );
+}
+
+function SuperDash() {
+  const patients = SEED.users.filter(u => u.role === "patient");
+  const staff = SEED.users.filter(u => ["clinic_admin", "clinic_staff"].includes(u.role));
+  return (
+    <div>
+      <PageHead title="Platform Overview" eyebrow="Super Admin" subtitle="RegenFlow multi-tenant platform management" />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+          <StatCard label="Active Clinics" value={SEED.clinics.length} icon={I.clinic} color="#B45309" delta={15} />
+          <StatCard label="Total Patients" value={patients.length} icon={I.patients} color={DS.colors.blue} />
+          <StatCard label="Staff Users" value={staff.length} icon={I.user} color={DS.colors.purple} />
+          <StatCard label="Platform MRR" value="$598" icon={I.chart} color={DS.colors.success} sub="2 clinics on Pro" />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <Card>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Active Tenants</h3>
+            {SEED.clinics.map(c => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
+                <div style={{ width: 38, height: 38, borderRadius: DS.radius.md, background: c.primary_color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: c.primary_color, fontSize: 15 }}>{c.clinic_name[0]}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.clinic_name}</div>
+                  <div style={{ fontSize: 11.5, color: DS.colors.muted }}>{getClinicPatients(c.id).length} patients · {c.plan_type} plan</div>
+                </div>
+                <Chip color={DS.colors.success} dot>Active</Chip>
+              </div>
+            ))}
+          </Card>
+          <Card>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Platform Activity</h3>
+            {[
+              { t: "Precision Pointe onboarded", time: "Jan 3, 2025" },
+              { t: "Luminary Longevity activated", time: "Dec 1, 2024" },
+              { t: "New patient signup — Precision Pointe", time: "Jan 18, 2025" },
+              { t: "Consent signed — Jordan Rivera", time: "Jan 9, 2025" },
+            ].map((a, i) => (
+              <div key={i} style={{ padding: "9px 0", borderBottom: i < 3 ? `1px solid ${DS.colors.border}` : "none", fontSize: 13 }}>
+                <div>{a.t}</div>
+                <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 1 }}>{a.time}</div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuperClinics() {
+  const { showToast, login } = useApp();
+  const [clinics, setClinics] = useState(SEED.clinics.map(c => ({ ...c })));
+  const [showNew, setShowNew] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPlan, setNewPlan] = useState("starter");
+  const [viewClinic, setViewClinic] = useState(null);
+  const [creating, setCreating] = useState(false);
+
+  const deactivate = (id) => {
+    setClinics(prev => prev.map(c => c.id === id ? { ...c, is_active: !c.is_active } : c));
+    const c = clinics.find(x => x.id === id);
+    showToast(`${c?.clinic_name} ${c?.is_active ? "deactivated" : "reactivated"}`);
+  };
+
+  const doCreate = async () => {
+    if (!newName.trim() || !newEmail.trim()) { showToast("Name and email are required", "error"); return; }
+    setCreating(true);
+    await new Promise(r => setTimeout(r, 800));
+    const newClinic = {
+      id: "clinic_" + Date.now(),
+      clinic_name: newName,
+      clinic_slug: newName.toLowerCase().replace(/\s+/g, "-"),
+      primary_color: "#1C4532",
+      secondary_color: "#E8F0EC",
+      contact_email: newEmail,
+      plan_type: newPlan,
+      is_active: true,
+      address: "",
+      portal_title: newName + " Patient Portal",
+      tagline: "Specialty regenerative care.",
+    };
+    setClinics(prev => [...prev, newClinic]);
+    setCreating(false);
+    setShowNew(false);
+    setNewName(""); setNewEmail(""); setNewPlan("starter");
+    showToast(`${newName} provisioned successfully`);
+  };
+
+  return (
+    <div>
+      <Modal open={!!viewClinic} onClose={() => setViewClinic(null)}
+        title={viewClinic?.clinic_name || ""}
+        subtitle={viewClinic?.address || ""}
+        width={500}>
+        {viewClinic && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {[
+              ["Email", viewClinic.contact_email],
+              ["Phone", viewClinic.contact_phone || "—"],
+              ["Plan", viewClinic.plan_type],
+              ["Status", viewClinic.is_active ? "Active" : "Inactive"],
+              ["Portal Title", viewClinic.portal_title || "—"],
+              ["Tagline", viewClinic.tagline || "—"],
+            ].map(([l, v]) => (
+              <div key={l} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${DS.colors.border}`, fontSize: 13.5 }}>
+                <span style={{ color: DS.colors.muted, fontWeight: 500 }}>{l}</span>
+                <span style={{ fontWeight: 600, color: DS.colors.ink, maxWidth: 260, textAlign: "right" }}>{v}</span>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 10, paddingTop: 8 }}>
+              <Btn variant="secondary" style={{ flex: 1, justifyContent: "center" }} onClick={() => { showToast("Impersonation mode — in production this would switch clinic context"); setViewClinic(null); }}>Impersonate</Btn>
+              <Btn variant={viewClinic.is_active ? "danger" : "secondary"} style={{ flex: 1, justifyContent: "center" }}
+                onClick={() => { deactivate(viewClinic.id); setViewClinic(prev => prev ? { ...prev, is_active: !prev.is_active } : null); }}>
+                {viewClinic.is_active ? "Deactivate" : "Reactivate"}
+              </Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={showNew} onClose={() => setShowNew(false)} title="Provision New Clinic" subtitle="Creates a new tenant on RegenFlow" width={460}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <Input label="Clinic Name" value={newName} onChange={setNewName} placeholder="Scottsdale Regenerative Medicine" required />
+          <Input label="Admin Email" value={newEmail} onChange={setNewEmail} type="email" placeholder="admin@clinic.com" required />
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 8 }}>Plan</label>
+            <div style={{ display: "flex", gap: 10 }}>
+              {[["starter", "Starter · $149/mo"], ["pro", "Growth · $299/mo"], ["enterprise", "Enterprise"]].map(([val, lbl]) => (
+                <button key={val} onClick={() => setNewPlan(val)}
+                  style={{ flex: 1, padding: "10px 8px", borderRadius: DS.radius.md, border: `1.5px solid ${newPlan === val ? DS.colors.primary : DS.colors.border}`, background: newPlan === val ? DS.colors.primaryLight : DS.colors.white, color: newPlan === val ? DS.colors.primary : DS.colors.ink, fontSize: 12, fontWeight: newPlan === val ? 700 : 400, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "center", transition: "all 0.12s" }}>
+                  {lbl}
+                </button>
               ))}
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn variant="secondary" onClick={() => setShowNew(false)}>Cancel</Btn>
-            <Btn onClick={doCreate} loading={creating}>Provision</Btn>
+            <Btn onClick={doCreate} loading={creating}>{I.clinic} Provision Clinic</Btn>
           </div>
         </div>
       </Modal>
+
+      <PageHead title="All Clinics" subtitle="Manage tenant accounts"
+        actions={<Btn size="sm" onClick={() => setShowNew(true)}>{I.clinic} New Clinic</Btn>} />
+      <div style={{ padding: "28px 36px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {clinics.map(c => (
+            <Card key={c.id} style={{ opacity: c.is_active ? 1 : 0.6 }}>
+              <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+                <div style={{ width: 46, height: 46, borderRadius: DS.radius.md, background: c.primary_color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 20, color: c.primary_color, flexShrink: 0 }}>
+                  {c.clinic_name[0]}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink }}>{c.clinic_name}</div>
+                  <div style={{ fontSize: 12.5, color: DS.colors.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.address || c.contact_email}</div>
+                </div>
+                <Chip color={c.is_active ? DS.colors.success : DS.colors.muted} dot>{c.is_active ? "Active" : "Inactive"}</Chip>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                {[
+                  ["Patients", getClinicPatients(c.id).length],
+                  ["Staff", SEED.users.filter(u => u.clinic_id === c.id && u.role !== "patient").length],
+                  ["Plan", c.plan_type]
+                ].map(([l, v]) => (
+                  <div key={l} style={{ textAlign: "center", padding: "10px 8px", background: DS.colors.surface, borderRadius: DS.radius.md }}>
+                    <div style={{ fontWeight: 800, fontSize: 18, color: DS.colors.ink }}>{v}</div>
+                    <div style={{ fontSize: 11, color: DS.colors.muted }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn size="sm" variant="secondary" onClick={() => setViewClinic(c)}>View Details</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => { showToast("Impersonation mode — in production this would switch clinic context"); }}>Impersonate</Btn>
+                <Btn size="sm" variant={c.is_active ? "danger" : "secondary"} onClick={() => deactivate(c.id)}>
+                  {c.is_active ? "Deactivate" : "Reactivate"}
+                </Btn>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
-
-function SuperUsers({ profiles }) {
-  const roleColors = { super_admin: "#B45309", clinic_admin: DS.colors.purple, clinic_staff: DS.colors.blue, patient: DS.colors.success };
+function SuperUsers() {
   return (
     <div>
-      <PageHead title="All Users" subtitle={`${profiles.length} across all tenants`} />
-      <div style={{ padding: "24px 36px" }}>
+      <PageHead title="All Users" subtitle="Every user across all tenants" />
+      <div style={{ padding: "28px 36px" }}>
         <Card style={{ padding: 0 }}>
-          {profiles.map((u, idx) => (
-            <div key={u.id} style={{ padding: "13px 20px", borderBottom: idx < profiles.length - 1 ? `1px solid ${DS.colors.border}` : "none", display: "flex", alignItems: "center", gap: 14 }}>
-              <Avatar name={u.name} size={30} color={roleColors[u.role]} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{u.email || "—"}</div>
+          <div style={{ padding: "12px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: 12, fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <span>Name</span><span>Email</span><span>Role</span><span>Clinic</span><span>Status</span>
+          </div>
+          {SEED.users.map(u => {
+            const c = u.clinic_id ? getClinic(u.clinic_id) : null;
+            const roleColors = { super_admin: "#B45309", clinic_admin: DS.colors.purple, clinic_staff: DS.colors.blue, patient: DS.colors.success };
+            return (
+              <div key={u.id} style={{ padding: "13px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: 12, alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Avatar name={u.name} size={28} color={roleColors[u.role]} />
+                  <span style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</span>
+                </div>
+                <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{u.email}</span>
+                <Chip color={roleColors[u.role]}>{u.role.replace("_", " ")}</Chip>
+                <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{c?.clinic_name || "Platform"}</span>
+                <Chip color={DS.colors.success} dot>Active</Chip>
               </div>
-              <Chip color={roleColors[u.role]}>{u.role?.replace("_", " ")}</Chip>
-              <div style={{ fontSize: 12, color: DS.colors.muted }}>{u.clinics?.clinic_name || "Platform"}</div>
-            </div>
-          ))}
+            );
+          })}
         </Card>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// MARKETING / HOME  (unchanged — just a simple landing)
-// ─────────────────────────────────────────────────────────────
-function HomePage() {
-  const { setPage } = useApp();
-  return (
-    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: DS.colors.surface, padding: 40, textAlign: "center" }}>
-      <div style={{ width: 64, height: 64, borderRadius: DS.radius.lg, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 24, marginBottom: 24 }}>RF</div>
-      <h1 style={{ fontSize: 40, fontWeight: 700, color: DS.colors.ink, margin: "0 0 14px", letterSpacing: "-1px", fontFamily: DS.fonts.display }}>RegenFlow</h1>
-      <p style={{ fontSize: 18, color: DS.colors.muted, maxWidth: 480, margin: "0 0 36px", lineHeight: 1.6 }}>Modern patient engagement for regenerative medicine clinics.</p>
-      <div style={{ display: "flex", gap: 14 }}>
-        <Btn size="lg" onClick={() => setPage("login")}>Sign In</Btn>
-        <Btn size="lg" variant="secondary" onClick={() => setPage("signup")}>Create Account</Btn>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
 // ROUTER
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
 function Router() {
-  const { page, currentUser, authLoading } = useApp();
-
-  if (authLoading) {
-    return (
-      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface }}>
-        <Spinner size={36} />
-      </div>
-    );
-  }
-
+  const { page, currentUser } = useApp();
   if (!currentUser) {
     if (page === "login") return <LoginPage />;
     if (page === "signup") return <SignupPage />;
     if (page === "forgot") return <ForgotPage />;
+    if (page === "market") return <MarketPage />;
     return <HomePage />;
   }
-
   if (currentUser.role === "patient") return <PatientPortal />;
   if (currentUser.role === "super_admin") return <SuperAdminPortal />;
   return <AdminPortal />;
