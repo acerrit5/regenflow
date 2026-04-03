@@ -436,7 +436,7 @@ function LoginPage() {
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Sign in to RegenFlow</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, margin: "0 0 6px" }}>Sign in to Klyrix</h1>
           <p style={{ fontSize: 14, color: DS.colors.muted }}>Enter your credentials to continue</p>
         </div>
         <Card>
@@ -576,7 +576,7 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ width: 34, height: 34, borderRadius: DS.radius.md, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, flexShrink: 0 }}>RF</div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>RegenFlow</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>Klyrix</div>
             {clinic && <div style={{ fontSize: 10.5, color: DS.colors.muted, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{clinic.clinic_name}</div>}
           </div>
           {isCollapsed && <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.muted, padding: 4 }}>✕</button>}
@@ -609,7 +609,7 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 56, background: DS.colors.white, borderBottom: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", padding: "0 16px", gap: 12, zIndex: 200 }}>
           <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.ink, padding: 6 }}>☰</button>
           <div style={{ width: 28, height: 28, borderRadius: DS.radius.sm, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
-          <span style={{ fontWeight: 700, fontSize: 14 }}>RegenFlow</span>
+          <span style={{ fontWeight: 700, fontSize: 14 }}>Klyrix</span>
         </div>
         {open && (
           <div style={{ position: "fixed", inset: 0, zIndex: 300 }}>
@@ -1680,7 +1680,7 @@ function AdminAI() {
         {aiChat.length === 0 && (
           <div style={{ textAlign: "center", paddingTop: 60, color: DS.colors.muted }}>
             <div style={{ fontSize: 28, marginBottom: 12 }}>✦</div>
-            <div style={{ fontWeight: 600, fontSize: 16, color: DS.colors.ink }}>RegenFlow AI</div>
+            <div style={{ fontWeight: 600, fontSize: 16, color: DS.colors.ink }}>Klyrix AI</div>
             <div style={{ fontSize: 13, marginTop: 6 }}>Ask me about patient risk, drafting messages, or clinic activity.</div>
           </div>
         )}
