@@ -1102,6 +1102,11 @@ function LoginPage() {
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: DS.fonts.body }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
         <div style={{ width: "100%", maxWidth: 380 }}>
+          <div style={{ marginBottom: 16 }}>
+            <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500, padding: 0, marginBottom: 20 }}>
+              ← Back to home
+            </button>
+          </div>
           <div style={{ marginBottom: 36 }}>
             <div onClick={() => setPage("home")} style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20, cursor: "pointer" }}>RF</div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
