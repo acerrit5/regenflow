@@ -1103,7 +1103,7 @@ function LoginPage() {
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
         <div style={{ width: "100%", maxWidth: 380 }}>
           <div style={{ marginBottom: 36 }}>
-            <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20 }}>RF</div>
+            <div onClick={() => setPage("home")} style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20, cursor: "pointer" }}>RF</div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
             <p style={{ color: DS.colors.muted, fontSize: 14 }}>Sign in to your RegenFlow account</p>
           </div>
@@ -1146,12 +1146,17 @@ function SignupPage() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
       <div style={{ width: "100%", maxWidth: 440, padding: 20 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
+          <div onClick={() => setPage("home")} style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px", cursor: "pointer" }}>RF</div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.6px" }}>Create your account</h1>
           <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Set up your clinic on RegenFlow in minutes</p>
         </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
           {[1, 2].map(s => <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? DS.colors.primary : DS.colors.border, transition: "background 0.3s" }} />)}
+        </div>
+        <div style={{ marginBottom: 16, textAlign: "center" }}>
+          <button onClick={() => step === 1 ? setPage("home") : setStep(1)} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500 }}>
+            ← {step === 1 ? "Back to home" : "Back"}
+          </button>
         </div>
         <Card style={{ padding: 32 }}>
           {step === 1 ? (
