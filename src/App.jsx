@@ -1,22 +1,5 @@
 import { useState, useEffect, createContext, useContext, useRef } from "react";
-import {
-  signIn as sbSignIn, signUp as sbSignUp, signOut as sbSignOut,
-  getSession, onAuthStateChange, getProfile,
-  getClinic as sbGetClinic, getAllClinics, createClinic, updateClinic, toggleClinicActive,
-  getClinicPatients as sbGetClinicPatients, getClinicStaff, updateProfile,
-  getPatientTasks, getClinicTasks, updateTaskStatus, createTask,
-  getPatientAppointments, getClinicAppointments, createAppointment, updateAppointmentStatus,
-  getPatientNotes, addPatientNote,
-  getClinicIntakeForms, submitIntakeResponse, getIntakeResponse,
-  getClinicConsentForms, getPatientConsentStatus, signConsent,
-  getClinicInstructions,
-  getClinicReminders, sendReminder,
-  getClinicUploadRequests, getPatientUploadRequests, createUploadRequest, markUploadReviewed, uploadPatientFile,
-  submitFollowupResponse, getPatientFollowups, getClinicFollowups,
-  getClinicInsights, dismissInsight,
-  logAction,
-} from "./lib/supabase";
-
+// 
 // ─────────────────────────────────────────────────────────
 // DESIGN SYSTEM
 // ─────────────────────────────────────────────────────────
@@ -102,14 +85,99 @@ function useIsMobile() {
 }
 
 // ─────────────────────────────────────────────────────────
-// (SEED DATA REMOVED — all data loaded from Supabase)
+// SEED DATA
 // ─────────────────────────────────────────────────────────
+const SEED = {
+  clinics: [
+    { id: "clinic_1", clinic_name: "Precision Pointe Regenerative", clinic_slug: "precisionpointe", primary_color: "#1C4532", secondary_color: "#E8F0EC", accent_color: "#C8A96A", contact_email: "jenny@precisionpointehealth.com", contact_phone: "(801) 613-8002", address: "11760 S 700 E, Suite 212, Salt Lake City, UT 84094", plan_type: "pro", is_active: true, portal_title: "Precision Pointe Patient Portal", tagline: "Personalized regenerative care for peak vitality." },
+    { id: "clinic_2", clinic_name: "Luminary Longevity", clinic_slug: "luminary", primary_color: "#1D2B5C", secondary_color: "#EEF0FB", accent_color: "#7C9BCC", contact_email: "care@luminarylongevity.com", contact_phone: "(310) 555-0847", address: "9420 Wilshire Blvd, Beverly Hills, CA 90212", plan_type: "pro", is_active: true, portal_title: "Luminary Longevity Patient Portal", tagline: "Optimize your biology. Extend your vitality." },
+  ],
+  users: [
+    { id: "user_super", email: "admin@regenflow.io", password: "demo1234", name: "Alex Morgan", role: "super_admin", clinic_id: null },
+    { id: "user_ca1", email: "admin@precisionpointe.com", password: "demo1234", name: "Dr. Sarah Chen", role: "clinic_admin", clinic_id: "clinic_1", title: "Medical Director" },
+    { id: "user_s1a", email: "staff1@precisionpointe.com", password: "demo1234", name: "Marcus Webb", role: "clinic_staff", clinic_id: "clinic_1", title: "Care Coordinator" },
+    { id: "user_s1b", email: "staff2@precisionpointe.com", password: "demo1234", name: "Priya Nair", role: "clinic_staff", clinic_id: "clinic_1", title: "Front Desk" },
+    { id: "user_ca2", email: "admin@luminary.com", password: "demo1234", name: "Dr. James Holloway", role: "clinic_admin", clinic_id: "clinic_2", title: "CMO" },
+    { id: "pat_1", email: "patient@demo.com", password: "demo1234", name: "Jordan Rivera", role: "patient", clinic_id: "clinic_1", phone: "(602) 555-0381", dob: "1985-07-14", joined: "2024-11-03", treatment: "PRP Knee Therapy" },
+    { id: "pat_2", email: "patient2@demo.com", password: "demo1234", name: "Taylor Brooks", role: "patient", clinic_id: "clinic_1", phone: "(480) 555-0224", dob: "1979-03-22", joined: "2024-12-10", treatment: "Stem Cell - Shoulder" },
+    { id: "pat_3", email: "patient3@demo.com", password: "demo1234", name: "Morgan Ellis", role: "patient", clinic_id: "clinic_1", phone: "(602) 555-0915", dob: "1991-11-05", joined: "2025-01-18", treatment: "Shockwave Therapy" },
+  ],
+  tasks: {
+    pat_1: [
+      { id: "t1", title: "Complete Medical History Form", type: "intake", status: "completed", due: "2025-01-10", completed_at: "2025-01-09" },
+      { id: "t2", title: "Sign PRP Consent Agreement", type: "consent", status: "completed", due: "2025-01-10", completed_at: "2025-01-09" },
+      { id: "t3", title: "Upload Recent Lab Results", type: "upload", status: "in_progress", due: "2025-01-15" },
+      { id: "t4", title: "Pre-Treatment Instructions Review", type: "instructions", status: "not_started", due: "2025-01-16" },
+      { id: "t5", title: "48-Hour Post-Treatment Check-In", type: "followup", status: "not_started", due: "2025-01-22" },
+    ],
+    pat_2: [
+      { id: "t6", title: "Complete Medical History Form", type: "intake", status: "completed", due: "2024-12-15", completed_at: "2024-12-14" },
+      { id: "t7", title: "Sign Stem Cell Consent Agreement", type: "consent", status: "in_progress", due: "2024-12-20" },
+      { id: "t8", title: "Upload MRI or Imaging Results", type: "upload", status: "not_started", due: "2024-12-22" },
+    ],
+    pat_3: [
+      { id: "t9", title: "Complete Intake Form", type: "intake", status: "not_started", due: "2025-01-25" },
+      { id: "t10", title: "Sign General Consent", type: "consent", status: "not_started", due: "2025-01-25" },
+    ],
+  },
+  intakeForms: [{
+    id: "form_1", clinic_id: "clinic_1", title: "New Patient Medical History",
+    description: "Please complete all fields prior to your first appointment. This helps our team personalize your regenerative care plan.",
+    fields: [
+      { id: "f1", label: "Full Legal Name", type: "text", required: true },
+      { id: "f2", label: "Date of Birth", type: "date", required: true },
+      { id: "f3", label: "Primary Concern / Reason for Visit", type: "textarea", required: true },
+      { id: "f4", label: "Current Medications (list all)", type: "textarea", required: false },
+      { id: "f5", label: "Known Allergies", type: "text", required: false },
+      { id: "f6", label: "Previous Surgeries or Procedures", type: "textarea", required: false },
+      { id: "f7", label: "Do you have any active infections or illnesses?", type: "radio", options: ["Yes", "No"], required: true },
+      { id: "f8", label: "Pain Level at Rest (1–10)", type: "text", required: false },
+      { id: "f9", label: "Pain Level During Activity (1–10)", type: "text", required: false },
+    ],
+  }],
+  consentForms: [
+    {
+      id: "consent_1", clinic_id: "clinic_1", title: "PRP Therapy Informed Consent",
+      content: `PLATELET-RICH PLASMA (PRP) THERAPY INFORMED CONSENT\n\nI, the undersigned, hereby consent to the performance of Platelet-Rich Plasma (PRP) therapy procedures by the medical staff at Precision Pointe Regenerative Health.\n\nNATURE OF PROCEDURE: PRP therapy involves drawing a small amount of my blood, processing it to concentrate the platelets, and injecting or applying the resulting solution to the treatment area.\n\nRISKS AND BENEFITS: I have been informed of the potential risks including temporary discomfort at the injection site, swelling, bruising, and infection (rare). Individual results vary and no guarantee of specific outcomes is made.\n\nALTERNATIVES: I understand that alternative treatments are available and that I have the right to refuse this procedure.\n\nFINANCIAL ACKNOWLEDGMENT: I understand that PRP therapy may not be covered by insurance, and I agree to be responsible for payment.\n\nBy signing below, I confirm that I have read, understood, and voluntarily agree to proceed with PRP therapy.`,
+    },
+    {
+      id: "consent_2", clinic_id: "clinic_1", title: "Stem Cell Therapy Informed Consent",
+      content: `STEM CELL THERAPY INFORMED CONSENT\n\nI, the undersigned, hereby consent to the performance of Stem Cell Therapy procedures by the medical staff at Precision Pointe Regenerative Health.\n\nNATURE OF PROCEDURE: Stem cell therapy involves harvesting mesenchymal stem cells from the patient's own bone marrow, processing them, and injecting the concentrated solution into the treatment area to stimulate natural tissue regeneration.\n\nRISKS AND BENEFITS: Potential risks include temporary discomfort at the harvest and injection sites, swelling, bruising, and rare risk of infection. Individual results vary and no guarantee of specific outcomes is made.\n\nHARVEST PROCEDURE: The bone marrow harvest takes approximately 15 minutes and is performed in-office. The harvest site may be sore for a few days following the procedure.\n\nFINANCIAL ACKNOWLEDGMENT: I understand that stem cell therapy is not covered by most insurance plans, and I agree to be responsible for payment.\n\nBy signing below, I confirm that I have read, understood, and voluntarily agree to proceed with Stem Cell Therapy.`,
+    },
+    {
+      id: "consent_3", clinic_id: "clinic_1", title: "General Treatment Consent",
+      content: `GENERAL TREATMENT INFORMED CONSENT\n\nI, the undersigned, hereby consent to the evaluation and treatment by the medical staff at Precision Pointe Regenerative Health.\n\nI understand that the proposed treatment will be explained to me and that I have the right to ask questions, refuse treatment, or withdraw consent at any time.\n\nI authorize the clinic to perform examinations and treatments as deemed necessary and appropriate by my care team.\n\nBy signing below, I confirm that I have read and understood this general consent form.`,
+    }
+  ],
+  instructions: [
+    { id: "instr_1", clinic_id: "clinic_1", title: "Pre-Treatment Instructions", type: "pre_visit", content: ["Stay well-hydrated — drink at least 64 oz of water the day before your appointment.", "Avoid anti-inflammatory medications (ibuprofen, aspirin, naproxen) for 7 days prior.", "Do not use topical numbing creams unless prescribed by our team.", "Eat a light meal 1–2 hours before your appointment.", "Wear comfortable, loose-fitting clothing that allows easy access to the treatment area.", "Arrive 15 minutes early to complete any remaining paperwork."] },
+    { id: "instr_2", clinic_id: "clinic_1", title: "Post-Treatment Care", type: "post_visit", content: ["Avoid strenuous exercise for 48 hours following treatment.", "Do not apply ice or heat to the treated area for 72 hours.", "Continue to avoid anti-inflammatory medications for 2 weeks post-treatment.", "Some soreness and mild swelling is normal and expected.", "Contact our office immediately if you experience severe pain, fever, or signs of infection.", "Schedule your follow-up appointment within 4–6 weeks."] },
+    { id: "instr_3", clinic_id: "clinic_1", title: "Shockwave Therapy — Before Your Session", type: "pre_visit", content: ["No special preparation is required for shockwave therapy.", "Wear comfortable clothing that allows easy access to the treatment area.", "Avoid applying lotions or creams to the area being treated.", "If you experience significant pain in the treatment area, let your provider know before the session.", "Arrive 10 minutes early to discuss your progress with your care team."] },
+    { id: "instr_4", clinic_id: "clinic_1", title: "Shockwave Therapy — After Your Session", type: "post_visit", content: ["Some mild soreness and redness at the treatment site is normal and expected.", "Apply ice for 15–20 minutes if the area is particularly sore.", "Avoid intense physical activity for 24–48 hours following treatment.", "Most patients receive 3–6 sessions spaced 1 week apart for optimal results.", "Contact us if you experience any unusual side effects or worsening symptoms."] },
+  ],
+  notes: [
+    { id: "note_1", patient_id: "pat_1", staff_id: "user_s1a", content: "Patient called to confirm appointment. Mentioned mild knee discomfort increasing during stairs. Reminded to avoid NSAIDs.", created_at: "2025-01-08T14:22:00Z" },
+    { id: "note_2", patient_id: "pat_1", staff_id: "user_ca1", content: "Reviewed uploaded labs. All within acceptable range for PRP candidacy. Cleared for treatment on Jan 20.", created_at: "2025-01-10T09:15:00Z" },
+    { id: "note_3", patient_id: "pat_2", staff_id: "user_s1a", content: "Consent form pending — sent follow-up reminder via email and SMS.", created_at: "2024-12-18T11:05:00Z" },
+  ],
+  appointments: [
+    { id: "appt_1", patient_id: "pat_1", clinic_id: "clinic_1", requested_date: "2025-01-20", requested_time: "10:00 AM", reason: "PRP Knee Treatment — Initial Session", status: "confirmed", created_at: "2025-01-09T16:30:00Z" },
+    { id: "appt_2", patient_id: "pat_2", clinic_id: "clinic_1", requested_date: "2025-01-28", requested_time: "2:00 PM", reason: "Stem Cell Consultation — Shoulder", status: "pending", created_at: "2024-12-19T10:00:00Z" },
+  ],
+  aiInsights: [
+    { id: "ai_1", patient_id: "pat_1", type: "risk", message: "Jordan has an incomplete upload task 6 days past due. Risk of delayed treatment clearance.", action: "Send reminder", severity: "medium" },
+    { id: "ai_2", patient_id: "pat_2", type: "engagement", message: "Taylor's consent form has been pending for 8 days. Send a personalized follow-up.", action: "Draft message", severity: "high" },
+    { id: "ai_3", patient_id: "pat_3", type: "onboarding", message: "Morgan Ellis just created an account. No tasks started. Recommend welcome sequence.", action: "Trigger welcome", severity: "low" },
+  ],
+};
 
 // ─────────────────────────────────────────────────────────
 // CONTEXT & HELPERS
 // ─────────────────────────────────────────────────────────
 const AppCtx = createContext(null);
 const useApp = () => useContext(AppCtx);
+const getClinic = (id) => SEED.clinics.find(c => c.id === id);
+const getClinicPatients = (clinicId) => SEED.users.filter(u => u.role === "patient" && u.clinic_id === clinicId);
 const statusColor = s => ({ completed: DS.colors.success, in_progress: DS.colors.warning, not_started: "#C4C4C0" }[s] || "#C4C4C0");
 const statusLabel = s => ({ completed: "Completed", in_progress: "In Progress", not_started: "Not Started" }[s] || s);
 
@@ -231,242 +299,100 @@ function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
   const [toast, setToast] = useState(null);
-  const [appLoading, setAppLoading] = useState(true);
-
-  // All data loaded from Supabase
-  const [clinic, setClinic] = useState(null);
-  const [patients, setPatients] = useState([]);
-  const [tasks, setTasks] = useState({});
-  const [notes, setNotes] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [reminderLog, setReminderLog] = useState([]);
-  const [uploadRequests, setUploadRequests] = useState([]);
-  const [intakeForms, setIntakeForms] = useState([]);
-  const [consentForms, setConsentForms] = useState([]);
-  const [instructionsList, setInstructionsList] = useState([]);
-  const [aiInsights, setAiInsights] = useState([]);
-  const [allClinics, setAllClinics] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [staffList, setStaffList] = useState([]);
-  const [followups, setFollowups] = useState([]);
-
+  const [tasks, setTasks] = useState(SEED.tasks);
+  const [notes, setNotes] = useState(SEED.notes);
+  const [appointments, setAppointments] = useState(SEED.appointments);
+  const [reminderLog, setReminderLog] = useState([
+    { id: "rl1", patient_id: "pat_1", type: "intake", channel: "Email", message: "Please complete your intake form before your appointment.", sent_by: "user_s1a", sent_at: "2025-01-07T10:00:00Z", status: "delivered" },
+    { id: "rl2", patient_id: "pat_2", type: "consent", channel: "Email + SMS", message: "Your consent form is pending signature.", sent_by: "user_s1a", sent_at: "2024-12-18T11:05:00Z", status: "delivered" },
+  ]);
+  const [uploadRequests, setUploadRequests] = useState([
+    { id: "ur1", patient_id: "pat_1", label: "Recent Lab Results", message: "Please upload your most recent bloodwork or lab results.", requested_by: "user_ca1", requested_at: "2025-01-08T09:00:00Z", status: "fulfilled" },
+  ]);
   const [aiThinking, setAiThinking] = useState(false);
   const [aiChat, setAiChat] = useState([]);
+  const [isDemo, setIsDemo] = useState(false);
 
+  const clinic = currentUser ? getClinic(currentUser.clinic_id) : null;
   const primaryColor = clinic?.primary_color || DS.colors.primary;
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
 
-  // Helper lookups from loaded data
-  const getClinicById = (id) => allClinics.find(c => c.id === id);
-  const getClinicPatientsLocal = (clinicId) => patients.filter(p => p.clinic_id === clinicId);
-  const getUserById = (id) => allUsers.find(u => u.id === id) || patients.find(p => p.id === id) || staffList.find(s => s.id === id) || currentUser;
+  const demoBlock = () => { showToast("Demo mode — sign up to save changes", "error"); return true; };
 
-  // Load all data for the current user's role
-  const loadData = async (prof) => {
-    try {
-      if (prof.role === "patient") {
-        const [myTasks, myAppts, myUploads] = await Promise.all([
-          getPatientTasks(prof.id),
-          getPatientAppointments(prof.id),
-          getPatientUploadRequests(prof.id),
-        ]);
-        setTasks({ [prof.id]: myTasks.map(t => ({ ...t, due: t.due_date, type: t.task_type })) });
-        setAppointments(myAppts);
-        setUploadRequests(myUploads);
-        if (prof.clinic_id) {
-          const [forms, consents, instrs] = await Promise.all([
-            getClinicIntakeForms(prof.clinic_id),
-            getClinicConsentForms(prof.clinic_id),
-            getClinicInstructions(prof.clinic_id),
-          ]);
-          setIntakeForms(forms);
-          setConsentForms(consents);
-          setInstructionsList(instrs);
-        }
-      } else if (prof.role === "super_admin") {
-        const [clinics] = await Promise.all([getAllClinics()]);
-        setAllClinics(clinics);
-      } else {
-        // clinic_admin or clinic_staff
-        const [pts, cTasks, cAppts, cNotes, cReminders, cUploads, forms, consents, instrs, insights, staff, cFollowups] = await Promise.all([
-          sbGetClinicPatients(prof.clinic_id),
-          getClinicTasks(prof.clinic_id),
-          getClinicAppointments(prof.clinic_id),
-          Promise.resolve([]),  // notes loaded per-patient
-          getClinicReminders(prof.clinic_id),
-          getClinicUploadRequests(prof.clinic_id),
-          getClinicIntakeForms(prof.clinic_id),
-          getClinicConsentForms(prof.clinic_id),
-          getClinicInstructions(prof.clinic_id),
-          getClinicInsights(prof.clinic_id),
-          getClinicStaff(prof.clinic_id),
-          getClinicFollowups(prof.clinic_id),
-        ]);
-        setPatients(pts);
-        // Group tasks by patient_id
-        const taskMap = {};
-        cTasks.forEach(t => {
-          const pid = t.patient_id;
-          if (!taskMap[pid]) taskMap[pid] = [];
-          taskMap[pid].push({ ...t, due: t.due_date, type: t.task_type });
-        });
-        setTasks(taskMap);
-        setAppointments(cAppts);
-        setReminderLog(cReminders);
-        setUploadRequests(cUploads);
-        setIntakeForms(forms);
-        setConsentForms(consents);
-        setInstructionsList(instrs);
-        setAiInsights(insights);
-        setStaffList(staff);
-        setFollowups(cFollowups);
-        // allUsers = staff + patients for lookup purposes
-        setAllUsers([...staff, ...pts]);
-      }
-    } catch (err) {
-      console.error("loadData error:", err);
-    }
+  const enterDemo = () => {
+    const demoAdmin = SEED.users.find(u => u.id === "user_ca1");
+    setCurrentUser(demoAdmin);
+    setIsDemo(true);
+    setPage("demo");
   };
 
-  // Session restoration on mount
-  useEffect(() => {
-    const init = async () => {
-      try {
-        const session = await getSession();
-        if (session?.user) {
-          const prof = await getProfile(session.user.id);
-          if (prof) {
-            const user = { ...prof, id: session.user.id };
-            setCurrentUser(user);
-            if (prof.clinics) setClinic(prof.clinics);
-            await loadData(user);
-            if (user.role === "patient") setPage("patient_dashboard");
-            else if (user.role === "super_admin") setPage("sa_dashboard");
-            else setPage("admin_dashboard");
-          }
-        }
-      } catch (err) {
-        console.error("Session restore error:", err);
-      }
-      setAppLoading(false);
-    };
-    init();
+  const exitDemo = () => { setCurrentUser(null); setIsDemo(false); setPage("home"); setAiChat([]); };
 
-    const { data: { subscription } } = onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
-        setCurrentUser(null);
-        setClinic(null);
-        setPatients([]);
-        setTasks({});
-        setNotes([]);
-        setAppointments([]);
-        setPage("home");
-        setAiChat([]);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const login = async (email, pw) => {
-    const { user, profile: prof, error } = await sbSignIn(email, pw);
-    if (error || !user || !prof) return false;
-    const u = { ...prof, id: user.id };
-    setCurrentUser(u);
-    if (prof.clinics) setClinic(prof.clinics);
-    await loadData(u);
-    if (u.role === "patient") setPage("patient_dashboard");
-    else if (u.role === "super_admin") setPage("sa_dashboard");
+  const login = (email, pw) => {
+    const user = SEED.users.find(u => u.email === email && u.password === pw);
+    if (!user) return false;
+    setCurrentUser(user);
+    if (user.role === "patient") setPage("patient_dashboard");
+    else if (user.role === "super_admin") setPage("sa_dashboard");
     else setPage("admin_dashboard");
     return true;
   };
 
-  const logout = async () => {
-    await sbSignOut();
-    setCurrentUser(null);
-    setClinic(null);
-    setPage("home");
-    setAiChat([]);
+  const logout = () => { setCurrentUser(null); setIsDemo(false); setPage("home"); setAiChat([]); };
+
+  const updateTask = (patId, taskId, status) => {
+    if (isDemo) return demoBlock();
+    setTasks(prev => ({ ...prev, [patId]: (prev[patId] || []).map(t => t.id === taskId ? { ...t, status, completed_at: status === "completed" ? new Date().toISOString() : undefined } : t) }));
+    showToast("Task updated");
   };
 
-  const updateTask = async (patId, taskId, status) => {
-    try {
-      await updateTaskStatus(taskId, status);
-      setTasks(prev => ({ ...prev, [patId]: (prev[patId] || []).map(t => t.id === taskId ? { ...t, status, completed_at: status === "completed" ? new Date().toISOString() : undefined } : t) }));
-      showToast("Task updated");
-    } catch (err) {
-      showToast("Failed to update task", "error");
-    }
+  const addNote = (pid, content) => {
+    if (isDemo) return demoBlock();
+    setNotes(prev => [...prev, { id: "n_" + Date.now(), patient_id: pid, staff_id: currentUser.id, content, created_at: new Date().toISOString() }]);
+    showToast("Note saved");
   };
 
-  const addNote = async (pid, content) => {
-    try {
-      const note = await addPatientNote({ patientId: pid, clinicId: currentUser.clinic_id, staffId: currentUser.id, content });
-      setNotes(prev => [note, ...prev]);
-      showToast("Note saved");
-    } catch (err) {
-      showToast("Failed to save note", "error");
-    }
+  const addAppointment = (pid, data) => {
+    if (isDemo) return demoBlock();
+    setAppointments(prev => [...prev, { id: "a_" + Date.now(), patient_id: pid, clinic_id: currentUser.clinic_id, ...data, status: "pending", created_at: new Date().toISOString() }]);
+    showToast("Appointment request submitted");
   };
 
-  const addAppointment = async (pid, data) => {
-    try {
-      const appt = await createAppointment({ patientId: pid, clinicId: currentUser.clinic_id, requestedDate: data.requested_date, requestedTime: data.requested_time, reason: data.reason });
-      setAppointments(prev => [...prev, appt]);
-      showToast("Appointment request submitted");
-    } catch (err) {
-      showToast("Failed to submit appointment", "error");
-    }
+  const addReminderLog = (patientId, data) => {
+    if (isDemo) return demoBlock();
+    const entry = { id: "rl_" + Date.now(), patient_id: patientId, sent_by: currentUser.id, sent_at: new Date().toISOString(), status: "delivered", ...data };
+    setReminderLog(prev => [entry, ...prev]);
+    showToast(`Reminder sent to ${SEED.users.find(u => u.id === patientId)?.name || "patient"}`);
   };
 
-  const addReminderLog = async (patientId, data) => {
-    try {
-      const reminder = await sendReminder({ patientId, clinicId: currentUser.clinic_id, sentBy: currentUser.id, reminderType: data.type, channel: data.channel, message: data.message });
-      setReminderLog(prev => [reminder, ...prev]);
-      const pat = patients.find(p => p.id === patientId);
-      showToast(`Reminder sent to ${pat?.name || "patient"}`);
-    } catch (err) {
-      showToast("Failed to send reminder", "error");
-    }
+  const addUploadRequest = (patientId, data) => {
+    if (isDemo) return demoBlock();
+    const entry = { id: "ur_" + Date.now(), patient_id: patientId, requested_by: currentUser.id, requested_at: new Date().toISOString(), status: "pending", ...data };
+    setUploadRequests(prev => [entry, ...prev]);
+    // Also create a task for the patient
+    const newTask = { id: "t_" + Date.now(), title: data.label || "Requested Document Upload", type: "upload", status: "not_started", due: data.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0] };
+    setTasks(prev => ({ ...prev, [patientId]: [...(prev[patientId] || []), newTask] }));
+    showToast(`Upload request sent to ${SEED.users.find(u => u.id === patientId)?.name || "patient"}`);
   };
 
-  const addUploadRequest = async (patientId, data) => {
-    try {
-      const req = await createUploadRequest({ patientId, clinicId: currentUser.clinic_id, requestedBy: currentUser.id, label: data.label, message: data.message, dueDate: data.dueDate });
-      setUploadRequests(prev => [req, ...prev]);
-      const pat = patients.find(p => p.id === patientId);
-      showToast(`Upload request sent to ${pat?.name || "patient"}`);
-    } catch (err) {
-      showToast("Failed to send upload request", "error");
-    }
-  };
-
-  const runAI = async (prompt) => {
+  const runAI = async (prompt, context = "") => {
     setAiThinking(true);
     setAiChat(prev => [...prev, { role: "user", text: prompt }]);
     await new Promise(r => setTimeout(r, 1400));
-    const patNames = patients.map(p => p.name).join(", ") || "your patients";
-    const defaultResp = `I've analyzed your clinic's current patient pipeline for: ${patNames}.\n\nWould you like me to draft any outreach messages or flag specific patients?`;
-    setAiChat(prev => [...prev, { role: "ai", text: defaultResp }]);
+    const responses = {
+      "risk": "Based on Jordan Rivera's profile, I've flagged a medium-priority risk: the lab upload task is 6 days overdue. Without this clearance, we risk delaying the January 20th treatment. I recommend sending a personalized SMS reminder today.",
+      "draft": "Here's a draft message for Taylor Brooks:\n\n'Hi Taylor — just a friendly reminder that your stem cell therapy consent form is still pending your signature. Completing this takes only 2 minutes and is required before we can confirm your appointment. Click here to sign: [portal link]. Questions? Call us at (801) 613-8002.'",
+      "welcome": "Welcome sequence triggered for Morgan Ellis. I've queued: (1) a branded welcome email, (2) an SMS with portal login link, and (3) a 48-hour follow-up if no tasks are started. Estimated task completion improvement: +65%.",
+      "default": "I've analyzed your clinic's current patient pipeline. Here's a summary:\n\n• 3 active patients across various treatment stages\n• 1 high-priority follow-up needed (Taylor Brooks — consent pending 8 days)\n• Intake completion rate this month: 67% (industry avg: 42%)\n• Recommended action: Enable automated 3-day consent reminder sequence\n\nWould you like me to draft any outreach messages or flag specific patients?",
+    };
+    const key = prompt.toLowerCase().includes("risk") ? "risk" : prompt.toLowerCase().includes("draft") || prompt.toLowerCase().includes("message") ? "draft" : prompt.toLowerCase().includes("welcome") || prompt.toLowerCase().includes("morgan") ? "welcome" : "default";
+    setAiChat(prev => [...prev, { role: "ai", text: responses[key] }]);
     setAiThinking(false);
   };
 
-  if (appLoading) {
-    return (
-      <>
-        <FontLoader />
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: DS.fonts.body }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
-            <div style={{ fontSize: 14, color: DS.colors.muted }}>Loading...</div>
-          </div>
-        </div>
-      </>
-    );
-  }
-
   return (
-    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, setNotes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, patients, intakeForms, consentForms, instructionsList, aiInsights, allClinics, setAllClinics, allUsers, staffList, setStaffList, followups, setFollowups, getClinicById, getClinicPatientsLocal, getUserById, loadData }}>
+    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, isDemo, enterDemo, exitDemo }}>
       <FontLoader />
       {children}
       {toast && (
@@ -721,7 +647,7 @@ function AIAssistant({ standalone = false }) {
 // PUBLIC PAGES
 // ─────────────────────────────────────────────────────────
 function HomePage() {
-  const { setPage } = useApp();
+  const { setPage, enterDemo } = useApp();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -786,7 +712,7 @@ function HomePage() {
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <Btn onClick={() => setPage("signup")} size="lg">Start Free Trial {I.arrow}</Btn>
-            <Btn variant="secondary" size="lg" onClick={() => setPage("login")}>View Live Demo</Btn>
+            <Btn variant="secondary" size="lg" onClick={() => enterDemo()}>View Live Demo</Btn>
           </div>
           <div style={{ marginTop: 24, display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap" }}>
             {["No credit card required", "14-day free trial", "White-label ready"].map(t => (
@@ -1090,25 +1016,25 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handle = async () => {
-    if (!email || !pw) { setErr("Please enter email and password."); return; }
     setLoading(true);
-    setErr("");
-    const ok = await login(email, pw);
-    if (!ok) { setErr("Invalid email or password."); showToast("Login failed", "error"); }
+    await new Promise(r => setTimeout(r, 600));
+    if (!login(email, pw)) { setErr("Invalid email or password."); showToast("Login failed", "error"); }
     setLoading(false);
   };
+
+  const demoAccounts = [
+    { label: "Patient Demo", e: "patient@demo.com", p: "demo1234", color: DS.colors.blue },
+    { label: "Clinic Staff", e: "staff1@precisionpointe.com", p: "demo1234", color: DS.colors.purple },
+    { label: "Clinic Admin", e: "admin@precisionpointe.com", p: "demo1234", color: DS.colors.primary },
+    { label: "Super Admin", e: "admin@regenflow.io", p: "demo1234", color: DS.colors.accent },
+  ];
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: DS.fonts.body }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
         <div style={{ width: "100%", maxWidth: 380 }}>
-          <div style={{ marginBottom: 16 }}>
-            <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500, padding: 0, marginBottom: 20 }}>
-              ← Back to home
-            </button>
-          </div>
           <div style={{ marginBottom: 36 }}>
-            <div onClick={() => setPage("home")} style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20, cursor: "pointer" }}>RF</div>
+            <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20 }}>RF</div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
             <p style={{ color: DS.colors.muted, fontSize: 14 }}>Sign in to your RegenFlow account</p>
           </div>
@@ -1119,6 +1045,20 @@ function LoginPage() {
           </div>
           {err && <div style={{ color: DS.colors.danger, fontSize: 13, marginBottom: 14, background: "#FFF5F5", padding: "10px 14px", borderRadius: DS.radius.md, border: "1px solid #FECACA" }}>{err}</div>}
           <Btn onClick={handle} style={{ width: "100%", justifyContent: "center", padding: "13px" }} loading={loading}>Sign In</Btn>
+
+          <div style={{ margin: "24px 0 16px", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
+            <span style={{ fontSize: 11, color: DS.colors.muted, fontWeight: 600, letterSpacing: "0.07em" }}>DEMO ACCOUNTS</span>
+            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {demoAccounts.map(d => (
+              <button key={d.e} onClick={() => { setEmail(d.e); setPw(d.p); }}
+                style={{ padding: "10px 14px", borderRadius: DS.radius.md, border: `1px solid ${d.color}25`, background: d.color + "0A", color: d.color, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "left", display: "flex", justifyContent: "space-between" }}>
+                <span>{d.label}</span><span style={{ opacity: 0.7, fontWeight: 400 }}>{d.e}</span>
+              </button>
+            ))}
+          </div>
           <p style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted, marginTop: 24 }}>
             No account? <button onClick={() => setPage("signup")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign up free</button>
           </p>
@@ -1151,17 +1091,12 @@ function SignupPage() {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
       <div style={{ width: "100%", maxWidth: 440, padding: 20 }}>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div onClick={() => setPage("home")} style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px", cursor: "pointer" }}>RF</div>
+          <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.6px" }}>Create your account</h1>
           <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Set up your clinic on RegenFlow in minutes</p>
         </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
           {[1, 2].map(s => <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? DS.colors.primary : DS.colors.border, transition: "background 0.3s" }} />)}
-        </div>
-        <div style={{ marginBottom: 16, textAlign: "center" }}>
-          <button onClick={() => step === 1 ? setPage("home") : setStep(1)} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500 }}>
-            ← {step === 1 ? "Back to home" : "Back"}
-          </button>
         </div>
         <Card style={{ padding: 32 }}>
           {step === 1 ? (
@@ -1181,14 +1116,7 @@ function SignupPage() {
                   <option value="clinic_staff">Staff Member</option>
                 </select>
               </div>
-              <Btn onClick={async () => {
-                if (!form.name || !form.email || !form.pw || !form.clinic) { return; }
-                try {
-                  const newClinic = await createClinic({ clinicName: form.clinic, contactEmail: form.email, planType: "starter" });
-                  await sbSignUp({ email: form.email, password: form.pw, name: form.name, clinicId: newClinic.id, role: form.role });
-                  setPage("login");
-                } catch (err) { console.error("Signup error:", err); }
-              }} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Create Account</Btn>
+              <Btn onClick={() => setPage("login")} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Create Account</Btn>
             </>
           )}
           <p style={{ textAlign: "center", fontSize: 12.5, color: DS.colors.muted, marginTop: 16 }}>
@@ -1260,7 +1188,7 @@ function PatientPortal() {
 }
 
 function PatientDash() {
-  const { currentUser, clinic, tasks, primaryColor, appointments } = useApp();
+  const { currentUser, clinic, tasks, primaryColor } = useApp();
   const { isMobile, isTablet } = useIsMobile();
   const isSmall = isMobile || isTablet;
   const myTasks = tasks[currentUser.id] || [];
@@ -1295,7 +1223,7 @@ function PatientDash() {
         <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr 1fr" : "repeat(4, 1fr)", gap: isMobile ? 10 : 16, marginBottom: isMobile ? 14 : 24 }}>
           <StatCard label="Pending Tasks" value={pending.length} icon={I.check} color={pc} />
           <StatCard label="Completed" value={done.length} icon={I.check} color={DS.colors.success} />
-          {!isMobile && <StatCard label="Next Appt." value={appointments[0]?.requested_date || "—"} icon={I.calendar} color={DS.colors.blue} />}
+          {!isMobile && <StatCard label="Next Appt." value="Jan 20" icon={I.calendar} color={DS.colors.blue} />}
           {!isMobile && <StatCard label="Status" value="Active" icon={I.check} color={DS.colors.purple} />}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isSmall ? "1fr" : "2fr 1fr", gap: isMobile ? 12 : 24 }}>
@@ -1324,8 +1252,8 @@ function PatientDash() {
             <Card>
               <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: DS.colors.ink }}>Next Appointment</h3>
               <div style={{ background: pc + "10", borderRadius: DS.radius.md, padding: "13px 14px", border: `1px solid ${pc}20` }}>
-                <div style={{ fontWeight: 700, color: DS.colors.ink, fontSize: 14 }}>{appointments[0]?.requested_date || "No upcoming appointments"}</div>
-                <div style={{ color: DS.colors.muted, fontSize: 12.5, marginTop: 2 }}>{appointments[0] ? `${appointments[0].requested_time} · ${appointments[0].reason}` : ""}</div>
+                <div style={{ fontWeight: 700, color: DS.colors.ink, fontSize: 14 }}>January 20, 2025</div>
+                <div style={{ color: DS.colors.muted, fontSize: 12.5, marginTop: 2 }}>10:00 AM · PRP Knee Treatment</div>
                 <div style={{ color: pc, fontSize: 12, fontWeight: 600, marginTop: 6 }}>{clinic?.clinic_name}</div>
               </div>
             </Card>
@@ -1426,10 +1354,10 @@ function PatientTasks() {
 }
 
 function PatientIntake() {
-  const { currentUser, showToast, tasks, updateTask, intakeForms } = useApp();
+  const { currentUser, showToast, tasks, updateTask } = useApp();
   const [submitted, setSubmitted] = useState(false);
   const [answers, setAnswers] = useState({});
-  const form = intakeForms[0];
+  const form = SEED.intakeForms.find(f => f.clinic_id === currentUser.clinic_id);
   const myTasks = tasks[currentUser.id] || [];
   const intakeTask = myTasks.find(t => t.type === "intake");
   if (intakeTask?.status === "completed" || submitted) return (
@@ -1480,12 +1408,19 @@ function PatientIntake() {
 }
 
 function PatientConsent() {
-  const { currentUser, showToast, tasks, updateTask, consentForms } = useApp();
+  const { currentUser, showToast, tasks, updateTask } = useApp();
   const [signed, setSigned] = useState(false);
   const [sig, setSig] = useState("");
   const myTasks = tasks[currentUser.id] || [];
   const consentTask = myTasks.find(t => t.type === "consent" && t.status !== "completed");
-  const consent = consentForms[0];
+  // Pick consent based on task title or treatment
+  const treatmentLower = (currentUser.treatment || "").toLowerCase();
+  const consent = SEED.consentForms.find(c => {
+    if (c.clinic_id !== currentUser.clinic_id) return false;
+    if (treatmentLower.includes("stem")) return c.id === "consent_2";
+    if (treatmentLower.includes("prp")) return c.id === "consent_1";
+    return c.id === "consent_3";
+  }) || SEED.consentForms[0];
   return (
     <div>
       <PageHead title="Consent Forms" subtitle="Review and sign required consent documents" />
@@ -1589,8 +1524,14 @@ function PatientAppointments() {
 }
 
 function PatientInstructions() {
-  const { currentUser, instructionsList } = useApp();
-  const instrs = instructionsList;
+  const { currentUser } = useApp();
+  const treatmentLower = (currentUser.treatment || "").toLowerCase();
+  const isShockwave = treatmentLower.includes("shock");
+  const instrs = SEED.instructions.filter(i => {
+    if (i.clinic_id !== currentUser.clinic_id) return false;
+    if (isShockwave) return i.id === "instr_3" || i.id === "instr_4";
+    return i.id === "instr_1" || i.id === "instr_2";
+  });
   return (
     <div>
       <PageHead title="Instructions" subtitle="Pre-visit and post-visit care information" />
@@ -1598,16 +1539,16 @@ function PatientInstructions() {
         {instrs.map(instr => (
           <Card key={instr.id}>
             <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
-              <div style={{ width: 40, height: 40, borderRadius: DS.radius.md, background: (instr.instruction_type || instr.type) === "pre_visit" ? "#DBEAFE" : DS.colors.primaryLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                {(instr.instruction_type || instr.type) === "pre_visit" ? "📋" : "🌿"}
+              <div style={{ width: 40, height: 40, borderRadius: DS.radius.md, background: instr.type === "pre_visit" ? "#DBEAFE" : DS.colors.primaryLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                {instr.type === "pre_visit" ? "📋" : "🌿"}
               </div>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15, color: DS.colors.ink }}>{instr.title}</div>
-                <div style={{ fontSize: 12, color: DS.colors.muted }}>{(instr.instruction_type || instr.type) === "pre_visit" ? "Before Your Visit" : "After Your Visit"}</div>
+                <div style={{ fontSize: 12, color: DS.colors.muted }}>{instr.type === "pre_visit" ? "Before Your Visit" : "After Your Visit"}</div>
               </div>
             </div>
             <ol style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 10 }}>
-              {(Array.isArray(instr.content) ? instr.content : [instr.content]).map((c, j) => <li key={j} style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.65 }}>{c}</li>)}
+              {instr.content.map((c, j) => <li key={j} style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.65 }}>{c}</li>)}
             </ol>
           </Card>
         ))}
@@ -1699,7 +1640,7 @@ function AdminPortal() {
   const [inviteTreatment, setInviteTreatment] = useState("");
   const [inviting, setInviting] = useState(false);
 
-  const { aiInsights } = useApp();
+  const aiInsights = SEED.aiInsights;
   const highRisk = aiInsights.filter(a => a.severity === "high").length;
 
   const doInvitePatient = async () => {
@@ -1766,9 +1707,10 @@ function AdminPortal() {
 }
 
 function AdminDash({ onNav }) {
-  const { currentUser, tasks, primaryColor, setSelectedPatientId, patients, aiInsights } = useApp();
+  const { currentUser, tasks, primaryColor, setSelectedPatientId } = useApp();
   const { isMobile, isTablet } = useIsMobile();
   const isSmall = isMobile || isTablet;
+  const patients = getClinicPatients(currentUser.clinic_id);
   const allTasks = patients.flatMap(p => tasks[p.id] || []);
   const pendingIntake = allTasks.filter(t => t.type === "intake" && t.status !== "completed").length;
   const pendingUploads = allTasks.filter(t => t.type === "upload" && t.status !== "completed").length;
@@ -1799,8 +1741,8 @@ function AdminDash({ onNav }) {
         <div style={{ background: DS.colors.primary, borderRadius: DS.radius.lg, padding: isMobile ? "14px 16px" : "20px 24px", marginBottom: isMobile ? 14 : 24, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ width: 36, height: 36, borderRadius: DS.radius.md, background: DS.colors.accent + "30", display: "flex", alignItems: "center", justifyContent: "center", color: DS.colors.accent, flexShrink: 0 }}>{I.spark}</div>
           <div style={{ flex: 1, minWidth: 160 }}>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: "#fff", marginBottom: 2 }}>AI flagged {aiInsights.length} items requiring attention</div>
-            <div style={{ fontSize: 12, color: "#ffffff80" }}>{aiInsights.filter(a=>a.severity==="high").length} high-priority · {aiInsights.filter(a=>a.severity==="medium").length} medium · {aiInsights.filter(a=>a.severity==="low").length} low</div>
+            <div style={{ fontWeight: 700, fontSize: 13.5, color: "#fff", marginBottom: 2 }}>AI flagged {SEED.aiInsights.length} items requiring attention</div>
+            <div style={{ fontSize: 12, color: "#ffffff80" }}>1 high-priority · 1 medium · 1 onboarding opportunity</div>
           </div>
           <Btn size="sm" style={{ background: DS.colors.accent, color: "#fff", border: "none", flexShrink: 0 }} onClick={() => onNav("aai")}>View Insights {I.arrow}</Btn>
         </div>
@@ -1846,7 +1788,12 @@ function AdminDash({ onNav }) {
           <div style={{ display: "flex", flexDirection: "column", gap: isSmall ? 12 : 18 }}>
             <Card>
               <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>Recent Activity</h3>
-              {patients.slice(0, 4).map((p, i) => ({ t: `${p.name} — ${p.treatment || "active patient"}`, time: p.created_at ? new Date(p.created_at).toLocaleDateString() : "—" })).map((a, i) => (
+              {[
+                { t: "Jordan Rivera completed intake form", time: "2h ago" },
+                { t: "Lab results uploaded by Jordan Rivera", time: "3h ago" },
+                { t: "AI sent consent reminder to Taylor Brooks", time: "1d ago" },
+                { t: "Morgan Ellis created account", time: "2d ago" },
+              ].map((a, i) => (
                 <div key={i} style={{ padding: "9px 0", borderBottom: i < 3 ? `1px solid ${DS.colors.border}` : "none" }}>
                   <div style={{ fontSize: 12.5, color: DS.colors.ink }}>{a.t}</div>
                   <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 1 }}>{a.time}</div>
@@ -1869,9 +1816,10 @@ function AdminDash({ onNav }) {
 }
 
 function AdminPatients({ onSelect, onInvite }) {
-  const { currentUser, tasks, setSelectedPatientId, primaryColor, patients } = useApp();
+  const { currentUser, tasks, setSelectedPatientId, primaryColor } = useApp();
   const { isMobile, isTablet } = useIsMobile();
   const isSmall = isMobile || isTablet;
+  const patients = getClinicPatients(currentUser.clinic_id);
   const [search, setSearch] = useState("");
   const filtered = patients.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase()));
   const pad = isMobile ? "14px" : isTablet ? "20px 24px" : "28px 36px";
@@ -1976,20 +1924,12 @@ function AdminPatients({ onSelect, onInvite }) {
 }
 
 function AdminPatientDetail() {
-  const { selectedPatientId, tasks, notes, setNotes, addNote, updateTask, primaryColor, addReminderLog, addUploadRequest, reminderLog, uploadRequests, patients, getUserById } = useApp();
+  const { selectedPatientId, tasks, notes, addNote, updateTask, primaryColor, addReminderLog, addUploadRequest, reminderLog, uploadRequests } = useApp();
   const { isMobile, isTablet } = useIsMobile();
   const isSmall = isMobile || isTablet;
 
-  const patient = patients.find(u => u.id === selectedPatientId) || patients[0];
+  const patient = SEED.users.find(u => u.id === selectedPatientId) || SEED.users.find(u => u.role === "patient");
   const ptTasks = tasks[patient?.id] || [];
-
-  // Load notes for this patient
-  useEffect(() => {
-    if (patient?.id) {
-      getPatientNotes(patient.id).then(n => setNotes(n)).catch(() => {});
-    }
-  }, [patient?.id]);
-
   const ptNotes = notes.filter(n => n.patient_id === patient?.id);
   const ptReminders = (reminderLog || []).filter(r => r.patient_id === patient?.id);
   const ptUploads = (uploadRequests || []).filter(r => r.patient_id === patient?.id);
@@ -2043,7 +1983,7 @@ function AdminPatientDetail() {
   const done = ptTasks.filter(t => t.status === "completed").length;
   const pct = ptTasks.length ? Math.round((done / ptTasks.length) * 100) : 0;
   const pad = isMobile ? "14px" : isTablet ? "18px 20px" : "24px 36px";
-  const staffName = (sid) => getUserById(sid)?.name || "Staff";
+  const staffName = (sid) => SEED.users.find(u => u.id === sid)?.name || "Staff";
 
   const CompletionRows = () => [["intake","Intake"],["consent","Consent"],["upload","Uploads"],["followup","Follow-Up"]].map(([type, label]) => {
     const tt = ptTasks.filter(t => t.type === type);
@@ -2207,7 +2147,7 @@ function AdminPatientDetail() {
               <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Internal Notes</h3>
               {ptNotes.length === 0 && <div style={{ fontSize: 13, color: DS.colors.muted, marginBottom: 14 }}>No notes yet.</div>}
               {ptNotes.map(n => {
-                const author = n.staff || getUserById(n.staff_id);
+                const author = SEED.users.find(u => u.id === n.staff_id);
                 return (
                   <div key={n.id} style={{ display: "flex", gap: 10, padding: "11px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
                     <Avatar name={author?.name} size={28} color={primaryColor} />
@@ -2258,7 +2198,7 @@ function AdminPatientDetail() {
   );
 }
 function AdminAIPage() {
-  const { showToast, aiInsights } = useApp();
+  const { showToast } = useApp();
   return (
     <div>
       <PageHead title="AI Assistant" subtitle="Powered by RegenFlow AI — clinic automation engine" eyebrow="AI Tools"
@@ -2268,7 +2208,7 @@ function AdminAIPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <Card>
               <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700 }}>AI Insights</h3>
-              {aiInsights.map(insight => (
+              {SEED.aiInsights.map(insight => (
                 <div key={insight.id} style={{ padding: "13px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                     <Chip color={insight.severity === "high" ? DS.colors.danger : insight.severity === "medium" ? DS.colors.warning : DS.colors.muted} dot size="sm">{insight.severity}</Chip>
@@ -2307,7 +2247,7 @@ function AdminAIPage() {
 }
 
 function AdminForms() {
-  const { showToast, intakeForms: loadedForms, currentUser } = useApp();
+  const { showToast } = useApp();
   const [preview, setPreview] = useState(null);
   const [editing, setEditing] = useState(null);
   const [editTitle, setEditTitle] = useState("");
@@ -2315,7 +2255,7 @@ function AdminForms() {
   const [newTemplate, setNewTemplate] = useState(false);
   const [ntTitle, setNtTitle] = useState("");
   const [ntDesc, setNtDesc] = useState("");
-  const [forms, setForms] = useState(loadedForms);
+  const [forms, setForms] = useState(SEED.intakeForms);
 
   const saveEdit = () => {
     setForms(prev => prev.map(f => f.id === editing.id ? { ...f, title: editTitle, description: editDesc } : f));
@@ -2369,7 +2309,7 @@ function AdminForms() {
             <Btn variant="secondary" onClick={() => setNewTemplate(false)}>Cancel</Btn>
             <Btn onClick={() => {
               if (!ntTitle.trim()) { showToast("Please enter a template name", "error"); return; }
-              setForms(prev => [...prev, { id: "form_" + Date.now(), clinic_id: currentUser.clinic_id, title: ntTitle, description: ntDesc, fields: [] }]);
+              setForms(prev => [...prev, { id: "form_" + Date.now(), clinic_id: "clinic_1", title: ntTitle, description: ntDesc, fields: [] }]);
               setNtTitle(""); setNtDesc("");
               setNewTemplate(false);
               showToast("New form template created");
@@ -2405,19 +2345,26 @@ function AdminForms() {
   );
 }
 function AdminConsents() {
-  const { currentUser, primaryColor, tasks, patients, consentForms } = useApp();
+  const { currentUser, primaryColor, tasks } = useApp();
+  const patients = getClinicPatients(currentUser.clinic_id);
   const [viewConsent, setViewConsent] = useState(null);
 
+  // Build real consent data per patient from tasks
   const consentData = patients.map(p => {
     const ptTasks = tasks[p.id] || [];
     const consentTask = ptTasks.find(t => t.type === "consent");
-    const cf = consentForms[0];
+    const consentForm = SEED.consentForms.find(c => c.clinic_id === p.clinic_id);
     return {
       patient: p,
-      consentTitle: cf?.title || "Treatment Consent",
+      consentTitle: (() => {
+        const tl = (p.treatment || "").toLowerCase();
+        if (tl.includes("stem")) return SEED.consentForms.find(c => c.id === "consent_2")?.title || "Stem Cell Therapy Consent";
+        if (tl.includes("prp")) return SEED.consentForms.find(c => c.id === "consent_1")?.title || "PRP Therapy Consent";
+        return SEED.consentForms.find(c => c.id === "consent_3")?.title || "General Treatment Consent";
+      })(),
       status: consentTask?.status === "completed" ? "signed" : consentTask?.status === "in_progress" ? "pending" : "not_started",
       date: consentTask?.completed_at ? new Date(consentTask.completed_at).toLocaleDateString() : null,
-      content: cf?.content || "",
+      content: consentForm?.content || "",
     };
   });
 
@@ -2479,7 +2426,11 @@ function AdminConsents() {
               <Chip color={statusColor(status)} dot>{statusLabel(status)}</Chip>
               <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{date || "—"}</span>
               <Btn size="sm" variant="secondary" onClick={() => {
-                setViewConsent({ patient: p, consentTitle, status, date, content: consentForms[0]?.content || "" });
+                const tl = (p.treatment || "").toLowerCase();
+                const cf = tl.includes("stem") ? SEED.consentForms.find(c => c.id === "consent_2") :
+                           tl.includes("prp") ? SEED.consentForms.find(c => c.id === "consent_1") :
+                           SEED.consentForms.find(c => c.id === "consent_3");
+                setViewConsent({ patient: p, consentTitle, status, date, content: cf?.content || "" });
               }}>View</Btn>
             </div>
           ))}
@@ -2572,16 +2523,18 @@ function AdminUploads() {
   );
 }
 function AdminFollowUp() {
-  const { currentUser, showToast, primaryColor, patients, followups } = useApp();
-  const [items, setItems] = useState(followups.map(f => ({
-    id: f.id, patient: f.patient?.name || "", patient_id: f.patient_id, form: f.questionnaire || "Follow-Up",
-    sent: f.submitted_at ? new Date(f.submitted_at).toLocaleDateString() : "", status: "completed", response: f.answers,
-  })));
+  const { currentUser, showToast, primaryColor } = useApp();
+  const [items, setItems] = useState([
+    { id: "fq1", patient: "Jordan Rivera", patient_id: "pat_1", form: "48-Hour Post-Treatment Check-In", sent: "Jan 22, 2025", status: "pending", response: null },
+    { id: "fq2", patient: "Taylor Brooks", patient_id: "pat_2", form: "1-Week Follow-Up Survey", sent: "Dec 28, 2024", status: "completed", response: { pain: "3", swelling: "No swelling", notes: "Feeling much better. Mild soreness around injection site but manageable." } },
+  ]);
   const [showSend, setShowSend] = useState(false);
   const [sendPatient, setSendPatient] = useState("");
   const [sendForm, setSendForm] = useState("48-Hour Post-Treatment Check-In");
   const [viewResponse, setViewResponse] = useState(null);
   const [sending, setSending] = useState(false);
+
+  const patients = getClinicPatients(currentUser.clinic_id);
   const pending = items.filter(i => i.status === "pending").length;
   const completed = items.filter(i => i.status === "completed").length;
 
@@ -2685,7 +2638,7 @@ function AdminFollowUp() {
   );
 }
 function AdminReminders() {
-  const { currentUser, showToast, primaryColor, reminderLog, addReminderLog, patients, getUserById } = useApp();
+  const { currentUser, showToast, primaryColor, reminderLog, addReminderLog } = useApp();
   const [showSend, setShowSend] = useState(false);
   const [sendPatient, setSendPatient] = useState("all");
   const [sendType, setSendType] = useState("intake");
@@ -2698,12 +2651,13 @@ function AdminReminders() {
     { id: "a4", label: "No-Show Re-engagement", trigger: "24h after missed appointment", channel: "SMS", active: false },
   ]);
 
-  const clinicLog = reminderLog || [];
+  const patients = getClinicPatients(currentUser.clinic_id);
+  const clinicLog = (reminderLog || []).filter(r => {
+    const pt = SEED.users.find(u => u.id === r.patient_id);
+    return pt?.clinic_id === currentUser.clinic_id;
+  });
 
-  const patientName = (pid) => {
-    const r = reminderLog.find(r => r.patient_id === pid);
-    return r?.patient?.name || getUserById(pid)?.name || pid;
-  };
+  const patientName = (pid) => SEED.users.find(u => u.id === pid)?.name || pid;
 
   const doSend = async () => {
     setSending(true);
@@ -2862,8 +2816,10 @@ function AdminBranding() {
 }
 
 function AdminStaff() {
-  const { currentUser, showToast, primaryColor, staffList: loadedStaff } = useApp();
-  const [staffList, setStaffList] = useState(loadedStaff);
+  const { currentUser, showToast, primaryColor } = useApp();
+  const [staffList, setStaffList] = useState(
+    SEED.users.filter(u => u.clinic_id === currentUser.clinic_id && u.role !== "patient")
+  );
   const [editing, setEditing] = useState(null);
   const [editName, setEditName] = useState("");
   const [editTitle, setEditTitle] = useState("");
@@ -2997,34 +2953,40 @@ function SuperAdminPortal() {
 }
 
 function SuperDash() {
-  const { allClinics } = useApp();
+  const patients = SEED.users.filter(u => u.role === "patient");
+  const staff = SEED.users.filter(u => ["clinic_admin", "clinic_staff"].includes(u.role));
   return (
     <div>
       <PageHead title="Platform Overview" eyebrow="Super Admin" subtitle="RegenFlow multi-tenant platform management" />
       <div style={{ padding: "28px 36px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
-          <StatCard label="Active Clinics" value={allClinics.length} icon={I.clinic} color="#B45309" delta={15} />
-          <StatCard label="Total Patients" value="—" icon={I.patients} color={DS.colors.blue} />
-          <StatCard label="Staff Users" value="—" icon={I.user} color={DS.colors.purple} />
-          <StatCard label="Platform MRR" value="—" icon={I.chart} color={DS.colors.success} />
+          <StatCard label="Active Clinics" value={SEED.clinics.length} icon={I.clinic} color="#B45309" delta={15} />
+          <StatCard label="Total Patients" value={patients.length} icon={I.patients} color={DS.colors.blue} />
+          <StatCard label="Staff Users" value={staff.length} icon={I.user} color={DS.colors.purple} />
+          <StatCard label="Platform MRR" value="$598" icon={I.chart} color={DS.colors.success} sub="2 clinics on Pro" />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
           <Card>
             <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Active Tenants</h3>
-            {allClinics.map(c => (
+            {SEED.clinics.map(c => (
               <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${DS.colors.border}` }}>
-                <div style={{ width: 38, height: 38, borderRadius: DS.radius.md, background: (c.primary_color || DS.colors.primary) + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: c.primary_color || DS.colors.primary, fontSize: 15 }}>{c.clinic_name?.[0] || "C"}</div>
+                <div style={{ width: 38, height: 38, borderRadius: DS.radius.md, background: c.primary_color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, color: c.primary_color, fontSize: 15 }}>{c.clinic_name[0]}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.clinic_name}</div>
-                  <div style={{ fontSize: 11.5, color: DS.colors.muted }}>{c.plan_type} plan</div>
+                  <div style={{ fontSize: 11.5, color: DS.colors.muted }}>{getClinicPatients(c.id).length} patients · {c.plan_type} plan</div>
                 </div>
-                <Chip color={c.is_active ? DS.colors.success : DS.colors.muted} dot>{c.is_active ? "Active" : "Inactive"}</Chip>
+                <Chip color={DS.colors.success} dot>Active</Chip>
               </div>
             ))}
           </Card>
           <Card>
             <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700 }}>Platform Activity</h3>
-            {allClinics.slice(0, 4).map((c, i) => ({ t: `${c.clinic_name} registered`, time: c.created_at ? new Date(c.created_at).toLocaleDateString() : "—" })).map((a, i) => (
+            {[
+              { t: "Precision Pointe onboarded", time: "Jan 3, 2025" },
+              { t: "Luminary Longevity activated", time: "Dec 1, 2024" },
+              { t: "New patient signup — Precision Pointe", time: "Jan 18, 2025" },
+              { t: "Consent signed — Jordan Rivera", time: "Jan 9, 2025" },
+            ].map((a, i) => (
               <div key={i} style={{ padding: "9px 0", borderBottom: i < 3 ? `1px solid ${DS.colors.border}` : "none", fontSize: 13 }}>
                 <div>{a.t}</div>
                 <div style={{ fontSize: 11, color: DS.colors.muted, marginTop: 1 }}>{a.time}</div>
@@ -3038,8 +3000,8 @@ function SuperDash() {
 }
 
 function SuperClinics() {
-  const { showToast, allClinics, setAllClinics } = useApp();
-  const [clinics, setClinics] = useState(allClinics.map(c => ({ ...c })));
+  const { showToast, login } = useApp();
+  const [clinics, setClinics] = useState(SEED.clinics.map(c => ({ ...c })));
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -3149,8 +3111,8 @@ function SuperClinics() {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
                 {[
-                  ["Patients", "—"],
-                  ["Staff", "—"],
+                  ["Patients", getClinicPatients(c.id).length],
+                  ["Staff", SEED.users.filter(u => u.clinic_id === c.id && u.role !== "patient").length],
                   ["Plan", c.plan_type]
                 ].map(([l, v]) => (
                   <div key={l} style={{ textAlign: "center", padding: "10px 8px", background: DS.colors.surface, borderRadius: DS.radius.md }}>
@@ -3174,13 +3136,6 @@ function SuperClinics() {
   );
 }
 function SuperUsers() {
-  const { allClinics, getClinicById } = useApp();
-  const [users, setUsers] = useState([]);
-  useEffect(() => {
-    // For super admin, we don't have a single allUsers list without iterating clinics.
-    // Show a placeholder until a more complete endpoint is available.
-    setUsers([]);
-  }, []);
   return (
     <div>
       <PageHead title="All Users" subtitle="Every user across all tenants" />
@@ -3189,22 +3144,17 @@ function SuperUsers() {
           <div style={{ padding: "12px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: 12, fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             <span>Name</span><span>Email</span><span>Role</span><span>Clinic</span><span>Status</span>
           </div>
-          {users.length === 0 && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: DS.colors.muted }}>
-              User listing is loaded per-clinic. Select a clinic to view its users.
-            </div>
-          )}
-          {users.map(u => {
-            const c = u.clinic_id ? getClinicById(u.clinic_id) : null;
+          {SEED.users.map(u => {
+            const c = u.clinic_id ? getClinic(u.clinic_id) : null;
             const roleColors = { super_admin: "#B45309", clinic_admin: DS.colors.purple, clinic_staff: DS.colors.blue, patient: DS.colors.success };
             return (
               <div key={u.id} style={{ padding: "13px 20px", borderBottom: `1px solid ${DS.colors.border}`, display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: 12, alignItems: "center" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <Avatar name={u.name} size={28} color={roleColors[u.role] || DS.colors.muted} />
+                  <Avatar name={u.name} size={28} color={roleColors[u.role]} />
                   <span style={{ fontSize: 13.5, fontWeight: 600 }}>{u.name}</span>
                 </div>
                 <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{u.email}</span>
-                <Chip color={roleColors[u.role] || DS.colors.muted}>{(u.role || "").replace("_", " ")}</Chip>
+                <Chip color={roleColors[u.role]}>{u.role.replace("_", " ")}</Chip>
                 <span style={{ fontSize: 12.5, color: DS.colors.muted }}>{c?.clinic_name || "Platform"}</span>
                 <Chip color={DS.colors.success} dot>Active</Chip>
               </div>
@@ -3217,10 +3167,78 @@ function SuperUsers() {
 }
 
 // ─────────────────────────────────────────────────────────
+// DEMO PAGE
+// ─────────────────────────────────────────────────────────
+function DemoBanner() {
+  const { exitDemo, setPage } = useApp();
+  return (
+    <div style={{ background: "#FBBF24", color: "#78350F", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: DS.fonts.body, fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em", zIndex: 999, position: "relative" }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        DEMO MODE — This is sample data. Sign up to use RegenFlow with your clinic.
+      </span>
+      <button onClick={() => { exitDemo(); }} style={{ background: "#78350F", color: "#FBBF24", border: "none", borderRadius: DS.radius.sm, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
+        Exit Demo
+      </button>
+      <button onClick={() => { exitDemo(); setTimeout(() => setPage("signup"), 50); }} style={{ background: "#fff", color: "#78350F", border: "none", borderRadius: DS.radius.sm, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
+        Sign Up Free
+      </button>
+    </div>
+  );
+}
+
+function DemoPage() {
+  const { currentUser, clinic, primaryColor, exitDemo, showToast, isDemo } = useApp();
+  const { isMobile, isTablet } = useIsMobile();
+  const isCollapsed = isMobile || isTablet;
+  const [active, setActive] = useState("ad");
+
+  const aiInsights = SEED.aiInsights;
+  const highRisk = aiInsights.filter(a => a.severity === "high").length;
+
+  const nav = [
+    { key: "ad", label: "Dashboard", icon: I.home },
+    { key: "ap", label: "Patients", icon: I.patients },
+    { key: "apd", label: "Patient Detail", icon: I.user },
+    { key: "aai", label: "AI Assistant", icon: I.spark, badge: highRisk || undefined },
+    { key: "aft", label: "Form Templates", icon: I.forms },
+    { key: "acr", label: "Consent Records", icon: I.shield },
+    { key: "auf", label: "Uploaded Files", icon: I.upload },
+    { key: "afq", label: "Follow-Up", icon: I.refresh },
+    { key: "arm", label: "Reminders", icon: I.bell },
+  ];
+
+  const pages = {
+    ad: <AdminDash onNav={setActive} />,
+    ap: <AdminPatients onSelect={() => setActive("apd")} onInvite={() => showToast("Demo mode — sign up to save changes", "error")} />,
+    apd: <AdminPatientDetail />,
+    aai: <AdminAIPage />,
+    aft: <AdminForms />,
+    acr: <AdminConsents />,
+    auf: <AdminUploads />,
+    afq: <AdminFollowUp />,
+    arm: <AdminReminders />,
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <DemoBanner />
+      <div style={{ display: "flex", flex: 1, position: "relative" }}>
+        <Sidebar items={nav} active={active} onSelect={setActive} user={currentUser} clinic={clinic} onLogout={exitDemo} primaryColor={primaryColor} />
+        <div style={{ marginLeft: isCollapsed ? 0 : 232, flex: 1, paddingTop: isCollapsed ? 56 : 0 }}>
+          {pages[active] || <AdminDash onNav={setActive} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
 // ROUTER
 // ─────────────────────────────────────────────────────────
 function Router() {
-  const { page, currentUser } = useApp();
+  const { page, currentUser, isDemo } = useApp();
+  if (isDemo && currentUser) return <DemoPage />;
   if (!currentUser) {
     if (page === "login") return <LoginPage />;
     if (page === "signup") return <SignupPage />;
@@ -3236,3 +3254,4 @@ function Router() {
 export default function App() {
   return <AppProvider><Router /></AppProvider>;
 }
+22
