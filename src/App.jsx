@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext, useRef } from "react";
-import { signUp as supabaseSignUp } from "./lib/supabase";
+import { signIn as supabaseSignIn, signUp as supabaseSignUp, signOut as supabaseSignOut, getSession, getProfile, supabase } from "./lib/supabase";
 // 
 // ─────────────────────────────────────────────────────────
 // DESIGN SYSTEM
@@ -313,8 +313,13 @@ function AppProvider({ children }) {
   const [aiThinking, setAiThinking] = useState(false);
   const [aiChat, setAiChat] = useState([]);
   const [isDemo, setIsDemo] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const clinic = currentUser ? getClinic(currentUser.clinic_id) : null;
+  // For real Supabase users, resolve clinic from the joined clinics() relation on profile
+  // For demo/SEED users, use the local getClinic helper
+  const clinic = currentUser
+    ? (currentUser.clinics || getClinic(currentUser.clinic_id))
+    : null;
   const primaryColor = clinic?.primary_color || DS.colors.primary;
 
   const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500); };
@@ -330,17 +335,47 @@ function AppProvider({ children }) {
 
   const exitDemo = () => { setCurrentUser(null); setIsDemo(false); setPage("home"); setAiChat([]); };
 
-  const login = (email, pw) => {
-    const user = SEED.users.find(u => u.email === email && u.password === pw);
-    if (!user) return false;
-    setCurrentUser(user);
-    if (user.role === "patient") setPage("patient_dashboard");
-    else if (user.role === "super_admin") setPage("sa_dashboard");
+  // Restore session on app load
+  useEffect(() => {
+    const restoreSession = async () => {
+      try {
+        const session = await getSession();
+        if (session?.user) {
+          const profile = await getProfile(session.user.id);
+          if (profile) {
+            setCurrentUser(profile);
+            if (profile.role === "patient") setPage("patient_dashboard");
+            else if (profile.role === "super_admin") setPage("sa_dashboard");
+            else setPage("admin_dashboard");
+          }
+        }
+      } catch (e) {
+        console.error("Session restore failed:", e);
+      }
+      setAuthLoading(false);
+    };
+    restoreSession();
+  }, []);
+
+  // Real Supabase login — returns { success, error }
+  const login = async (email, pw) => {
+    const { user, profile, error } = await supabaseSignIn(email, pw);
+    if (error) return { success: false, error: error.message || "Invalid email or password." };
+    if (!profile) return { success: false, error: "Account found but profile not set up. Contact support." };
+    setCurrentUser(profile);
+    if (profile.role === "patient") setPage("patient_dashboard");
+    else if (profile.role === "super_admin") setPage("sa_dashboard");
     else setPage("admin_dashboard");
-    return true;
+    return { success: true };
   };
 
-  const logout = () => { setCurrentUser(null); setIsDemo(false); setPage("home"); setAiChat([]); };
+  const logout = async () => {
+    await supabaseSignOut();
+    setCurrentUser(null);
+    setIsDemo(false);
+    setPage("home");
+    setAiChat([]);
+  };
 
   const updateTask = (patId, taskId, status) => {
     if (isDemo) return demoBlock();
@@ -393,7 +428,7 @@ function AppProvider({ children }) {
   };
 
   return (
-    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, isDemo, enterDemo, exitDemo }}>
+    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, isDemo, enterDemo, exitDemo, authLoading }}>
       <FontLoader />
       {children}
       {toast && (
@@ -1017,9 +1052,10 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const handle = async () => {
+    setErr("");
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    if (!login(email, pw)) { setErr("Invalid email or password."); showToast("Login failed", "error"); }
+    const result = await login(email, pw);
+    if (!result.success) { setErr(result.error); showToast("Login failed", "error"); }
     setLoading(false);
   };
 
@@ -1104,11 +1140,21 @@ function SignupPage() {
     try {
       const { user, error } = await supabaseSignUp({ email: form.email, password: form.pw, name: form.name });
       if (error) { setErr(error.message || "Signup failed. Please try again."); setLoading(false); return; }
-      // If Supabase returns a user with an unconfirmed email (email confirmation is ON)
+      // Duplicate email detection — Supabase returns a user with empty identities
       if (user && !user.confirmed_at && user.identities?.length === 0) {
         setErr("An account with this email already exists. Try signing in instead.");
         setLoading(false);
         return;
+      }
+      // Create a profile row for the new user (role=patient, no clinic assignment yet)
+      if (user) {
+        await supabase.from("profiles").upsert({
+          id: user.id,
+          name: form.name.trim(),
+          email: form.email.trim().toLowerCase(),
+          role: "patient",
+          clinic_id: null,
+        });
       }
       if (user && !user.confirmed_at) {
         showToast("Check your email to confirm your account, then sign in.");
@@ -3261,8 +3307,17 @@ function DemoPage() {
 // ROUTER
 // ─────────────────────────────────────────────────────────
 function Router() {
-  const { page, currentUser, isDemo } = useApp();
+  const { page, currentUser, isDemo, authLoading } = useApp();
   if (isDemo && currentUser) return <DemoPage />;
+  // Show loading spinner while restoring session
+  if (authLoading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
+        <div style={{ color: DS.colors.muted, fontSize: 14 }}>Loading...</div>
+      </div>
+    </div>
+  );
   if (!currentUser) {
     if (page === "login") return <LoginPage />;
     if (page === "signup") return <SignupPage />;
