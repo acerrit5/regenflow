@@ -341,7 +341,7 @@ function AppProvider({ children }) {
       try {
         const session = await getSession();
         if (session?.user) {
-          const profile = await getProfile(session.user.id);
+          const profile = await ensureProfile(session.user);
           if (profile) {
             setCurrentUser(profile);
             if (profile.role === "patient") setPage("patient_dashboard");
@@ -357,11 +357,33 @@ function AppProvider({ children }) {
     restoreSession();
   }, []);
 
+  // Helper: ensure a profile row exists for the given auth user, creating one if missing
+  const ensureProfile = async (authUser) => {
+    let profile = await getProfile(authUser.id);
+    if (!profile) {
+      // Profile missing (trigger didn't fire or RLS blocked it) — create a fallback row
+      const name = authUser.user_metadata?.name || authUser.email?.split("@")[0] || "User";
+      const { error: insertErr } = await supabase.from("profiles").upsert({
+        id: authUser.id,
+        name,
+        email: authUser.email,
+        role: "patient",
+        clinic_id: null,
+      });
+      if (insertErr) console.error("Fallback profile insert failed:", insertErr);
+      // Re-fetch to get the full row with joined clinics()
+      profile = await getProfile(authUser.id);
+    }
+    return profile;
+  };
+
   // Real Supabase login — returns { success, error }
   const login = async (email, pw) => {
-    const { user, profile, error } = await supabaseSignIn(email, pw);
+    const { user, profile: initialProfile, error } = await supabaseSignIn(email, pw);
     if (error) return { success: false, error: error.message || "Invalid email or password." };
-    if (!profile) return { success: false, error: "Account found but profile not set up. Contact support." };
+    // Fallback: if auth succeeded but profile is missing, create one automatically
+    const profile = initialProfile || await ensureProfile(user);
+    if (!profile) return { success: false, error: "Account created but profile setup failed. Please try again." };
     setCurrentUser(profile);
     if (profile.role === "patient") setPage("patient_dashboard");
     else if (profile.role === "super_admin") setPage("sa_dashboard");
@@ -1146,15 +1168,16 @@ function SignupPage() {
         setLoading(false);
         return;
       }
-      // Create a profile row for the new user (role=patient, no clinic assignment yet)
+      // Explicitly create profile row — don't rely on DB trigger alone
       if (user) {
-        await supabase.from("profiles").upsert({
+        const { error: profileErr } = await supabase.from("profiles").upsert({
           id: user.id,
           name: form.name.trim(),
           email: form.email.trim().toLowerCase(),
           role: "patient",
           clinic_id: null,
-        });
+        }, { onConflict: "id" });
+        if (profileErr) console.error("Profile creation failed:", profileErr);
       }
       if (user && !user.confirmed_at) {
         showToast("Check your email to confirm your account, then sign in.");
