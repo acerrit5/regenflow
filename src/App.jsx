@@ -183,6 +183,38 @@ const statusColor = s => ({ completed: DS.colors.success, in_progress: DS.colors
 const statusLabel = s => ({ completed: "Completed", in_progress: "In Progress", not_started: "Not Started" }[s] || s);
 
 // ─────────────────────────────────────────────────────────
+// BRAND MARK
+// ─────────────────────────────────────────────────────────
+const LeafIcon = ({ size = 28, color = "#1C4532" }) => (
+  <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 28C8 28 6 18 14 12C22 6 28 4 28 4C28 4 26 14 18 20C10 26 8 28 8 28Z" fill={color} fillOpacity="0.12" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M8 28C12 22 18 14 28 4" stroke={color} strokeWidth="1.2" strokeLinecap="round" opacity="0.5"/>
+    <path d="M14 20C16 18 19 15 22 11" stroke={color} strokeWidth="1" strokeLinecap="round" opacity="0.35"/>
+  </svg>
+);
+
+const BrandWordmark = ({ size = 18, color = "#1C4532" }) => (
+  <span style={{ fontFamily: DS.fonts.display, fontSize: size, letterSpacing: "0.08em", color, lineHeight: 1 }}>
+    <span style={{ fontWeight: 300 }}>Regen</span><span style={{ fontWeight: 500 }}>Flow</span>
+  </span>
+);
+
+const BrandLogo = ({ iconSize = 28, textSize = 18, color = "#1C4532", gap = 10 }) => (
+  <div style={{ display: "flex", alignItems: "center", gap }}>
+    <LeafIcon size={iconSize} color={color} />
+    <BrandWordmark size={textSize} color={color} />
+  </div>
+);
+
+// Auth page brand — centered, slightly larger
+const AuthBrand = ({ style = {} }) => (
+  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, ...style }}>
+    <LeafIcon size={32} color="#1C4532" />
+    <BrandWordmark size={20} color="#1C4532" />
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────
 // PRIMITIVES
 // ─────────────────────────────────────────────────────────
 function Avatar({ name = "", size = 36, color = DS.colors.primary }) {
@@ -481,9 +513,9 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
     <div style={{ width: isCollapsed ? 260 : 232, background: DS.colors.white, borderRight: `1px solid ${DS.colors.border}`, display: "flex", flexDirection: "column", height: "100vh", overflowY: "auto" }}>
       <div style={{ padding: "20px 18px 14px", borderBottom: `1px solid ${DS.colors.border}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 34, height: 34, borderRadius: DS.radius.md, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700, fontSize: 14, letterSpacing: "0.05em", flexShrink: 0 }}>RF</div>
+          <LeafIcon size={28} color={primaryColor} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink, letterSpacing: "-0.2px" }}>RegenFlow</div>
+            <BrandWordmark size={14} color={DS.colors.ink} />
             {clinic && <div style={{ fontSize: 10.5, color: DS.colors.muted, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{clinic.clinic_name}</div>}
           </div>
           {isCollapsed && (
@@ -526,10 +558,7 @@ function Sidebar({ items, active, onSelect, user, clinic, onLogout, primaryColor
           <button onClick={() => setOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", color: DS.colors.ink, padding: 6, display: "flex", borderRadius: DS.radius.sm }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: DS.radius.sm, background: primaryColor, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
-            <span style={{ fontWeight: 700, fontSize: 14, color: DS.colors.ink }}>RegenFlow</span>
-          </div>
+          <BrandLogo iconSize={24} textSize={14} color={primaryColor} />
           {clinic && <span style={{ fontSize: 12, color: DS.colors.muted, marginLeft: 4 }}>· {clinic.clinic_name}</span>}
           <div style={{ marginLeft: "auto" }}>
             <Avatar name={user?.name} size={30} color={primaryColor} />
@@ -745,11 +774,8 @@ function HomePage() {
   return (
     <div style={{ fontFamily: DS.fonts.body, background: DS.colors.white, minHeight: "100vh" }}>
       {/* Nav */}
-      <nav style={{ padding: "0 60px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: scrolled ? "rgba(255,255,255,0.96)" : "transparent", backdropFilter: scrolled ? "blur(12px)" : "none", borderBottom: scrolled ? `1px solid ${DS.colors.border}` : "none", zIndex: 50, transition: "all 0.3s ease" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 32, height: 32, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 13, letterSpacing: "0.05em" }}>RF</div>
-          <span style={{ fontWeight: 700, fontSize: 17, color: DS.colors.ink, letterSpacing: "-0.3px" }}>RegenFlow</span>
-        </div>
+      <nav style={{ padding: "0 60px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: scrolled ? "rgba(255,255,255,0.92)" : "transparent", backdropFilter: scrolled ? "blur(8px)" : "none", borderBottom: scrolled ? "1px solid rgba(0,0,0,0.06)" : "none", zIndex: 50, transition: "all 0.3s ease" }}>
+        <BrandLogo />
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <Btn variant="ghost" size="sm" onClick={() => setPage("market")}>Market Analysis</Btn>
           <Btn variant="ghost" size="sm" onClick={() => setPage("login")}>Sign In</Btn>
@@ -939,10 +965,7 @@ function HomePage() {
 
       {/* Footer */}
       <footer style={{ padding: "28px 60px", borderTop: `1px solid ${DS.colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 28, height: 28, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 11 }}>RF</div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: DS.colors.ink }}>RegenFlow</span>
-        </div>
+        <BrandLogo iconSize={22} textSize={14} />
         <div style={{ fontSize: 12, color: DS.colors.muted }}>© 2026 RegenFlow · Patient engagement platform for specialty clinics · Not an EHR or diagnostic tool</div>
         <div style={{ display: "flex", gap: 16 }}>
           {["Privacy", "Terms", "Security"].map(l => <span key={l} style={{ fontSize: 12, color: DS.colors.muted, cursor: "pointer" }}>{l}</span>)}
@@ -973,11 +996,8 @@ function MarketPage() {
 
   return (
     <div style={{ fontFamily: DS.fonts.body, background: DS.colors.white, minHeight: "100vh" }}>
-      <nav style={{ padding: "0 60px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${DS.colors.border}`, background: DS.colors.white }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ width: 30, height: 30, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 12 }}>RF</div>
-          <span style={{ fontWeight: 700, fontSize: 16, color: DS.colors.ink }}>RegenFlow</span>
-        </div>
+      <nav style={{ padding: "0 60px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(255,255,255,0.92)", backdropFilter: "blur(8px)" }}>
+        <BrandLogo iconSize={26} textSize={16} />
         <Btn size="sm" variant="secondary" onClick={() => setPage("home")}>← Back to Home</Btn>
       </nav>
 
@@ -1094,7 +1114,7 @@ function LoginPage() {
             ← Back to home
           </button>
           <div style={{ marginBottom: 36 }}>
-            <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20 }}>RF</div>
+            <AuthBrand />
             <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
             <p style={{ color: DS.colors.muted, fontSize: 14 }}>Sign in to your RegenFlow account</p>
           </div>
@@ -1183,7 +1203,7 @@ function SignupPage() {
           ← Back to home
         </button>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}><BrandLogo iconSize={32} textSize={20} /></div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.6px" }}>Create your account</h1>
           <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Get started with RegenFlow — a super admin will assign your clinic</p>
         </div>
@@ -3313,7 +3333,7 @@ function Router() {
   if (authLoading) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
       <div style={{ textAlign: "center" }}>
-        <div style={{ width: 48, height: 48, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 18, margin: "0 auto 16px" }}>RF</div>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}><BrandLogo iconSize={36} textSize={22} /></div>
         <div style={{ color: DS.colors.muted, fontSize: 14 }}>Loading...</div>
       </div>
     </div>
