@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext, useRef } from "react";
+import { signUp as supabaseSignUp } from "./lib/supabase";
 // 
 // ─────────────────────────────────────────────────────────
 // DESIGN SYSTEM
@@ -1033,6 +1034,9 @@ function LoginPage() {
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: DS.fonts.body }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
         <div style={{ width: "100%", maxWidth: 380 }}>
+          <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500, padding: 0, marginBottom: 24, display: "flex", alignItems: "center", gap: 4 }}>
+            ← Back to home
+          </button>
           <div style={{ marginBottom: 36 }}>
             <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, marginBottom: 20 }}>RF</div>
             <h1 style={{ fontSize: 28, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.8px", margin: "0 0 6px" }}>Welcome back</h1>
@@ -1083,42 +1087,59 @@ function LoginPage() {
   );
 }
 
+// NOTE: Supabase Authentication → Email → "Enable email confirmations" must be turned OFF
+// in the Supabase dashboard for instant sign-in after signup. If it's ON, users will see
+// a "check your email" message instead of being redirected to login immediately.
 function SignupPage() {
-  const { setPage } = useApp();
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: "", email: "", pw: "", clinic: "", role: "clinic_admin" });
+  const { setPage, showToast } = useApp();
+  const [form, setForm] = useState({ name: "", email: "", pw: "" });
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+
+  const handleSignup = async () => {
+    setErr("");
+    if (!form.name.trim() || !form.email.trim() || !form.pw.trim()) { setErr("All fields are required."); return; }
+    if (form.pw.length < 8) { setErr("Password must be at least 8 characters."); return; }
+    setLoading(true);
+    try {
+      const { user, error } = await supabaseSignUp({ email: form.email, password: form.pw, name: form.name });
+      if (error) { setErr(error.message || "Signup failed. Please try again."); setLoading(false); return; }
+      // If Supabase returns a user with an unconfirmed email (email confirmation is ON)
+      if (user && !user.confirmed_at && user.identities?.length === 0) {
+        setErr("An account with this email already exists. Try signing in instead.");
+        setLoading(false);
+        return;
+      }
+      if (user && !user.confirmed_at) {
+        showToast("Check your email to confirm your account, then sign in.");
+        setPage("login");
+      } else {
+        showToast("Account created! You can now sign in.");
+        setPage("login");
+      }
+    } catch (e) {
+      setErr(e.message || "Something went wrong. Please try again.");
+    }
+    setLoading(false);
+  };
+
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
       <div style={{ width: "100%", maxWidth: 440, padding: 20 }}>
+        <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500, padding: 0, marginBottom: 24, display: "flex", alignItems: "center", gap: 4 }}>
+          ← Back to home
+        </button>
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <div style={{ width: 44, height: 44, borderRadius: DS.radius.md, background: DS.colors.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: 16, margin: "0 auto 18px" }}>RF</div>
           <h1 style={{ fontSize: 26, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.6px" }}>Create your account</h1>
-          <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Set up your clinic on RegenFlow in minutes</p>
-        </div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 24 }}>
-          {[1, 2].map(s => <div key={s} style={{ flex: 1, height: 3, borderRadius: 2, background: step >= s ? DS.colors.primary : DS.colors.border, transition: "background 0.3s" }} />)}
+          <p style={{ color: DS.colors.muted, fontSize: 14, marginTop: 4 }}>Get started with RegenFlow — a super admin will assign your clinic</p>
         </div>
         <Card style={{ padding: 32 }}>
-          {step === 1 ? (
-            <>
-              <Input label="Full Name" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Dr. Jane Smith" style={{ marginBottom: 14 }} />
-              <Input label="Work Email" value={form.email} onChange={v => setForm({ ...form, email: v })} type="email" placeholder="you@clinic.com" style={{ marginBottom: 14 }} />
-              <Input label="Password" value={form.pw} onChange={v => setForm({ ...form, pw: v })} type="password" placeholder="Min 8 characters" style={{ marginBottom: 24 }} />
-              <Btn onClick={() => setStep(2)} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Continue {I.arrow}</Btn>
-            </>
-          ) : (
-            <>
-              <Input label="Clinic Name" value={form.clinic} onChange={v => setForm({ ...form, clinic: v })} placeholder="Scottsdale Regenerative Medicine" style={{ marginBottom: 14 }} />
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.07em", display: "block", marginBottom: 5 }}>Your Role</label>
-                <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={{ border: `1.5px solid ${DS.colors.border}`, borderRadius: DS.radius.md, padding: "11px 14px", fontSize: 14, color: DS.colors.ink, fontFamily: DS.fonts.body, background: DS.colors.surface, width: "100%" }}>
-                  <option value="clinic_admin">Clinic Admin / Owner</option>
-                  <option value="clinic_staff">Staff Member</option>
-                </select>
-              </div>
-              <Btn onClick={() => setPage("login")} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Create Account</Btn>
-            </>
-          )}
+          <Input label="Full Name" value={form.name} onChange={v => setForm({ ...form, name: v })} placeholder="Dr. Jane Smith" style={{ marginBottom: 14 }} />
+          <Input label="Work Email" value={form.email} onChange={v => setForm({ ...form, email: v })} type="email" placeholder="you@clinic.com" style={{ marginBottom: 14 }} />
+          <Input label="Password" value={form.pw} onChange={v => setForm({ ...form, pw: v })} type="password" placeholder="Min 8 characters" style={{ marginBottom: 24 }} />
+          {err && <div style={{ color: DS.colors.danger, fontSize: 13, marginBottom: 14, background: "#FFF5F5", padding: "10px 14px", borderRadius: DS.radius.md, border: "1px solid #FECACA" }}>{err}</div>}
+          <Btn onClick={handleSignup} loading={loading} style={{ width: "100%", justifyContent: "center", padding: "13px" }}>Create Account</Btn>
           <p style={{ textAlign: "center", fontSize: 12.5, color: DS.colors.muted, marginTop: 16 }}>
             Already have an account? <button onClick={() => setPage("login")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign in</button>
           </p>
@@ -1134,6 +1155,9 @@ function ForgotPage() {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
       <div style={{ width: "100%", maxWidth: 380, padding: 20 }}>
+        <button onClick={() => setPage("home")} style={{ background: "none", border: "none", color: DS.colors.muted, fontSize: 13, cursor: "pointer", fontFamily: DS.fonts.body, fontWeight: 500, padding: 0, marginBottom: 24, display: "flex", alignItems: "center", gap: 4 }}>
+          ← Back to home
+        </button>
         <Card style={{ padding: 36 }}>
           <div style={{ marginBottom: 28 }}>
             <h2 style={{ fontSize: 24, fontWeight: 700, color: DS.colors.ink, letterSpacing: "-0.5px", margin: "0 0 6px" }}>Reset your password</h2>
