@@ -326,11 +326,16 @@ function AppProvider({ children }) {
 
   const demoBlock = () => { showToast("Demo mode — sign up to save changes", "error"); return true; };
 
-  const enterDemo = () => {
-    const demoAdmin = SEED.users.find(u => u.id === "user_ca1");
-    setCurrentUser(demoAdmin);
+  const enterDemo = (userId = "user_ca1") => {
+    const demoUser = SEED.users.find(u => u.id === userId);
+    setCurrentUser(demoUser);
     setIsDemo(true);
     setPage("demo");
+  };
+
+  const switchDemoRole = (userId) => {
+    const demoUser = SEED.users.find(u => u.id === userId);
+    if (demoUser) setCurrentUser(demoUser);
   };
 
   const exitDemo = () => { setCurrentUser(null); setIsDemo(false); setPage("home"); setAiChat([]); };
@@ -450,7 +455,7 @@ function AppProvider({ children }) {
   };
 
   return (
-    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, isDemo, enterDemo, exitDemo, authLoading }}>
+    <AppCtx.Provider value={{ page, setPage, currentUser, clinic, primaryColor, login, logout, showToast, tasks, updateTask, notes, addNote, appointments, addAppointment, selectedPatientId, setSelectedPatientId, aiThinking, aiChat, runAI, reminderLog, uploadRequests, addReminderLog, addUploadRequest, isDemo, enterDemo, exitDemo, switchDemoRole, authLoading }}>
       <FontLoader />
       {children}
       {toast && (
@@ -1081,13 +1086,6 @@ function LoginPage() {
     setLoading(false);
   };
 
-  const demoAccounts = [
-    { label: "Patient Demo", e: "patient@demo.com", p: "demo1234", color: DS.colors.blue },
-    { label: "Clinic Staff", e: "staff1@precisionpointe.com", p: "demo1234", color: DS.colors.purple },
-    { label: "Clinic Admin", e: "admin@precisionpointe.com", p: "demo1234", color: DS.colors.primary },
-    { label: "Super Admin", e: "admin@regenflow.io", p: "demo1234", color: DS.colors.accent },
-  ];
-
   return (
     <div style={{ minHeight: "100vh", display: "flex", fontFamily: DS.fonts.body }}>
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, background: DS.colors.white }}>
@@ -1107,20 +1105,6 @@ function LoginPage() {
           </div>
           {err && <div style={{ color: DS.colors.danger, fontSize: 13, marginBottom: 14, background: "#FFF5F5", padding: "10px 14px", borderRadius: DS.radius.md, border: "1px solid #FECACA" }}>{err}</div>}
           <Btn onClick={handle} style={{ width: "100%", justifyContent: "center", padding: "13px" }} loading={loading}>Sign In</Btn>
-
-          <div style={{ margin: "24px 0 16px", display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
-            <span style={{ fontSize: 11, color: DS.colors.muted, fontWeight: 600, letterSpacing: "0.07em" }}>DEMO ACCOUNTS</span>
-            <div style={{ flex: 1, height: 1, background: DS.colors.border }} />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {demoAccounts.map(d => (
-              <button key={d.e} onClick={() => { setEmail(d.e); setPw(d.p); }}
-                style={{ padding: "10px 14px", borderRadius: DS.radius.md, border: `1px solid ${d.color}25`, background: d.color + "0A", color: d.color, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, textAlign: "left", display: "flex", justifyContent: "space-between" }}>
-                <span>{d.label}</span><span style={{ opacity: 0.7, fontWeight: 400 }}>{d.e}</span>
-              </button>
-            ))}
-          </div>
           <p style={{ textAlign: "center", fontSize: 13, color: DS.colors.muted, marginTop: 24 }}>
             No account? <button onClick={() => setPage("signup")} style={{ background: "none", border: "none", color: DS.colors.primary, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body }}>Sign up free</button>
           </p>
@@ -3260,67 +3244,60 @@ function SuperUsers() {
 }
 
 // ─────────────────────────────────────────────────────────
-// DEMO PAGE
+// DEMO PAGE — Self-contained, uses only SEED data
 // ─────────────────────────────────────────────────────────
-function DemoBanner() {
-  const { exitDemo, setPage } = useApp();
-  return (
-    <div style={{ background: "#FBBF24", color: "#78350F", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, fontFamily: DS.fonts.body, fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em", zIndex: 999, position: "relative" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        DEMO MODE — This is sample data. Sign up to use RegenFlow with your clinic.
-      </span>
-      <button onClick={() => { exitDemo(); }} style={{ background: "#78350F", color: "#FBBF24", border: "none", borderRadius: DS.radius.sm, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
-        Exit Demo
-      </button>
-      <button onClick={() => { exitDemo(); setTimeout(() => setPage("signup"), 50); }} style={{ background: "#fff", color: "#78350F", border: "none", borderRadius: DS.radius.sm, padding: "4px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
-        Sign Up Free
-      </button>
-    </div>
-  );
-}
+const DEMO_ROLES = [
+  { key: "clinic_admin", label: "Clinic Admin", userId: "user_ca1" },
+  { key: "clinic_staff", label: "Clinic Staff", userId: "user_s1a" },
+  { key: "patient", label: "Patient View", userId: "pat_1" },
+  { key: "super_admin", label: "Super Admin", userId: "user_super" },
+];
 
 function DemoPage() {
-  const { currentUser, clinic, primaryColor, exitDemo, showToast, isDemo } = useApp();
-  const { isMobile, isTablet } = useIsMobile();
-  const isCollapsed = isMobile || isTablet;
-  const [active, setActive] = useState("ad");
+  const { currentUser, exitDemo, switchDemoRole, setPage } = useApp();
+  const { isMobile } = useIsMobile();
 
-  const aiInsights = SEED.aiInsights;
-  const highRisk = aiInsights.filter(a => a.severity === "high").length;
+  const activeRole = DEMO_ROLES.find(r => r.userId === currentUser?.id) || DEMO_ROLES[0];
+  const roleLabel = activeRole.label;
 
-  const nav = [
-    { key: "ad", label: "Dashboard", icon: I.home },
-    { key: "ap", label: "Patients", icon: I.patients },
-    { key: "apd", label: "Patient Detail", icon: I.user },
-    { key: "aai", label: "AI Assistant", icon: I.spark, badge: highRisk || undefined },
-    { key: "aft", label: "Form Templates", icon: I.forms },
-    { key: "acr", label: "Consent Records", icon: I.shield },
-    { key: "auf", label: "Uploaded Files", icon: I.upload },
-    { key: "afq", label: "Follow-Up", icon: I.refresh },
-    { key: "arm", label: "Reminders", icon: I.bell },
-  ];
+  const handleRoleSwitch = (role) => { switchDemoRole(role.userId); };
+  const handleSignup = () => { exitDemo(); setTimeout(() => setPage("signup"), 50); };
 
-  const pages = {
-    ad: <AdminDash onNav={setActive} />,
-    ap: <AdminPatients onSelect={() => setActive("apd")} onInvite={() => showToast("Demo mode — sign up to save changes", "error")} />,
-    apd: <AdminPatientDetail />,
-    aai: <AdminAIPage />,
-    aft: <AdminForms />,
-    acr: <AdminConsents />,
-    auf: <AdminUploads />,
-    afq: <AdminFollowUp />,
-    arm: <AdminReminders />,
+  // Determine which portal to render based on the current SEED user's role
+  const renderPortal = () => {
+    if (!currentUser) return null;
+    if (currentUser.role === "patient") return <PatientPortal />;
+    if (currentUser.role === "super_admin") return <SuperAdminPortal />;
+    return <AdminPortal />;
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: DS.colors.surface, fontFamily: DS.fonts.body }}>
-      <DemoBanner />
-      <div style={{ display: "flex", flex: 1, position: "relative" }}>
-        <Sidebar items={nav} active={active} onSelect={setActive} user={currentUser} clinic={clinic} onLogout={exitDemo} primaryColor={primaryColor} />
-        <div style={{ marginLeft: isCollapsed ? 0 : 232, flex: 1, paddingTop: isCollapsed ? 56 : 0 }}>
-          {pages[active] || <AdminDash onNav={setActive} />}
-        </div>
+      {/* Role switcher bar */}
+      <div style={{ background: DS.colors.white, borderBottom: `1px solid ${DS.colors.border}`, padding: isMobile ? "8px 12px" : "8px 24px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 12, zIndex: 1000, position: "sticky", top: 0, flexWrap: "wrap", justifyContent: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: DS.colors.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginRight: 4 }}>View as:</span>
+        {DEMO_ROLES.map(r => (
+          <button key={r.key} onClick={() => handleRoleSwitch(r)}
+            style={{ padding: isMobile ? "5px 10px" : "6px 14px", borderRadius: DS.radius.full, border: activeRole.key === r.key ? `2px solid ${DS.colors.primary}` : `1px solid ${DS.colors.border}`, background: activeRole.key === r.key ? DS.colors.primary + "12" : DS.colors.white, color: activeRole.key === r.key ? DS.colors.primary : DS.colors.muted, fontSize: isMobile ? 11 : 12.5, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, transition: "all 0.15s" }}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {/* Demo mode banner */}
+      <div style={{ background: "linear-gradient(135deg, #C8A96A 0%, #1C4532 100%)", color: "#fff", padding: isMobile ? "10px 14px" : "10px 24px", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, flexWrap: "wrap", zIndex: 999, position: "sticky", top: isMobile ? 38 : 42 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, display: "inline-flex", alignItems: "center", gap: 6 }}>
+          DEMO MODE — You're viewing as <strong>{roleLabel}</strong>.
+        </span>
+        <button onClick={handleSignup} style={{ background: "#fff", color: DS.colors.primary, border: "none", borderRadius: DS.radius.sm, padding: "5px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
+          Exit Demo → Sign Up Free
+        </button>
+        <button onClick={() => exitDemo()} style={{ background: "transparent", color: "#ffffffc0", border: "1px solid #ffffff40", borderRadius: DS.radius.sm, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: DS.fonts.body, whiteSpace: "nowrap" }}>
+          Back to Home
+        </button>
+      </div>
+      {/* Render the actual portal for the current demo role */}
+      <div style={{ flex: 1 }}>
+        {renderPortal()}
       </div>
     </div>
   );
