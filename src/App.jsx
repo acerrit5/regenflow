@@ -777,6 +777,7 @@ function HomePage() {
       <nav style={{ padding: "0 60px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: scrolled ? "rgba(255,255,255,0.92)" : "transparent", backdropFilter: scrolled ? "blur(8px)" : "none", borderBottom: scrolled ? "1px solid rgba(0,0,0,0.06)" : "none", zIndex: 50, transition: "all 0.3s ease" }}>
         <BrandLogo />
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontWeight: 600, fontSize: 14, color: DS.colors.text }}>Kevin</span>
           <Btn variant="ghost" size="sm" onClick={() => setPage("market")}>Market Analysis</Btn>
           <Btn variant="ghost" size="sm" onClick={() => setPage("login")}>Sign In</Btn>
           <Btn size="sm" onClick={() => setPage("signup")}>Get Started</Btn>
